@@ -1,0 +1,239 @@
+import { createLevel } from './level';
+import { blankPixels } from './pixels';
+import { defaultPalette } from './palette';
+import { ASSET_SIZE, type KarenProject, type Level } from './model';
+
+/** Palette indices (default palette, DB32 part) used by the starter art. */
+const C = {
+    black: 1,
+    navy: 2,
+    brownDark: 4,
+    brown: 5,
+    tan: 7,
+    skin: 8,
+    greenLight: 10,
+    green: 11,
+    greenDark: 13,
+    blueDark: 16,
+    greyLight: 23,
+    grey: 24,
+    red: 28,
+    pink: 29,
+    magenta: 30,
+} as const;
+
+/** Small drawing helper over a 32×32 palette-index image. */
+class Painter {
+    readonly pixels = blankPixels();
+    private _seed: number;
+
+    constructor(seed: number) {
+        this._seed = seed;
+    }
+
+    /** Deterministic pseudo-random number in [0, 1). */
+    random(): number {
+        this._seed = (this._seed * 1103515245 + 12345) & 0x7fffffff;
+        return this._seed / 0x80000000;
+    }
+
+    rect(x: number, y: number, w: number, h: number, color: number): this {
+        for (let j = y; j < y + h; j++) {
+            for (let i = x; i < x + w; i++) {
+                if (i >= 0 && j >= 0 && i < ASSET_SIZE && j < ASSET_SIZE) {
+                    this.pixels[j * ASSET_SIZE + i] = color;
+                }
+            }
+        }
+        return this;
+    }
+
+    /** Scatter single pixels of `colors` over a rectangle. */
+    speckle(x: number, y: number, w: number, h: number, colors: number[], count: number): this {
+        for (let n = 0; n < count; n++) {
+            const i = x + Math.floor(this.random() * w);
+            const j = y + Math.floor(this.random() * h);
+            this.rect(i, j, 1, 1, colors[Math.floor(this.random() * colors.length)]);
+        }
+        return this;
+    }
+}
+
+function dirt(): number[] {
+    return new Painter(1)
+        .rect(0, 0, 32, 32, C.brown)
+        .speckle(0, 0, 32, 32, [C.brownDark, C.tan], 70).pixels;
+}
+
+function grass(): number[] {
+    const p = new Painter(2)
+        .rect(0, 0, 32, 32, C.brown)
+        .speckle(0, 8, 32, 24, [C.brownDark, C.tan], 55);
+    p.rect(0, 0, 32, 7, C.green);
+    for (let x = 0; x < 32; x++) {
+        p.rect(x, 7, 1, 1 + Math.floor(p.random() * 4), C.green);
+    }
+    return p.speckle(0, 0, 32, 6, [C.greenLight, C.greenDark], 18).pixels;
+}
+
+function brick(): number[] {
+    const p = new Painter(3).rect(0, 0, 32, 32, C.grey);
+    for (let row = 0; row < 4; row++) {
+        const offset = row % 2 === 0 ? 0 : -8;
+        for (let x = offset; x < 32; x += 16) {
+            p.rect(x, row * 8, 15, 7, C.red);
+            p.rect(x, row * 8, 15, 1, C.pink);
+        }
+    }
+    return p.pixels;
+}
+
+function platform(): number[] {
+    return new Painter(4)
+        .rect(0, 0, 32, 10, C.tan)
+        .rect(0, 0, 32, 2, C.skin)
+        .rect(0, 10, 32, 2, C.brownDark)
+        .rect(15, 2, 2, 8, C.brown).pixels;
+}
+
+function heroine(): number[] {
+    return new Painter(5)
+        .rect(9, 2, 14, 6, C.brownDark) // hair
+        .rect(7, 4, 4, 12, C.brownDark)
+        .rect(11, 6, 12, 9, C.skin) // face
+        .rect(19, 9, 2, 2, C.navy) // eye
+        .rect(10, 15, 13, 9, C.magenta) // shirt
+        .rect(21, 17, 3, 5, C.skin) // arm
+        .rect(12, 24, 4, 8, C.blueDark) // legs
+        .rect(18, 24, 4, 8, C.blueDark).pixels;
+}
+
+/** Starter level: ground, a pit, platforms and a brick wall. BOB ids: see `newProject`. */
+function starterLevel(): Level {
+    const level = createLevel(1, 'Niveau 1', 60, 15);
+    const put = (bob: number, c0: number, c1: number, r0: number, r1 = r0) => {
+        for (let r = r0; r <= r1; r++) {
+            for (let c = c0; c <= c1; c++) {
+                level.tiles[r * level.cols + c] = bob;
+            }
+        }
+    };
+    put(1, 0, 59, 12); // grass
+    put(2, 0, 59, 13, 14); // dirt
+    put(0, 22, 24, 12, 14); // pit
+    put(4, 7, 10, 9); // platforms
+    put(4, 13, 16, 6);
+    put(4, 27, 31, 9);
+    put(3, 36, 37, 10, 11); // brick wall
+    put(3, 45, 49, 7);
+    return level;
+}
+
+/**
+ * Starter scripts, as a Blockly workspace: at each level start, create the heroine
+ * (gravity, camera); run with ← →; jump with space when on the ground.
+ */
+function starterCode(): object {
+    const num = (n: number) => ({ shadow: { type: 'math_number', fields: { NUM: n } } });
+    const player = { block: { type: 'variables_get', fields: { VAR: { id: 'var_joueur' } } } };
+    const setProp = (prop: string, value: number, next?: object) => ({
+        type: 'karen_sprite_set',
+        fields: { PROP: prop },
+        inputs: { SPRITE: player, VALUE: num(value) },
+        ...(next ? { next: { block: next } } : {}),
+    });
+    const keyDown = (key: number) => ({
+        block: { type: 'karen_key_down', fields: { KEY: String(key) } },
+    });
+    return {
+        blocks: {
+            languageVersion: 0,
+            blocks: [
+                {
+                    type: 'karen_on_level_start',
+                    x: 20,
+                    y: 20,
+                    next: {
+                        block: {
+                            type: 'variables_set',
+                            fields: { VAR: { id: 'var_joueur' } },
+                            inputs: {
+                                VALUE: {
+                                    block: {
+                                        type: 'karen_sprite_create',
+                                        fields: { SPRITE: '1' },
+                                        inputs: { X: num(64), Y: num(300) },
+                                    },
+                                },
+                            },
+                            next: {
+                                block: setProp('gravity', 1, {
+                                    type: 'karen_camera_follow',
+                                    inputs: { SPRITE: player },
+                                }),
+                            },
+                        },
+                    },
+                },
+                {
+                    type: 'karen_on_tick',
+                    x: 20,
+                    y: 320,
+                    next: {
+                        block: {
+                            type: 'controls_if',
+                            extraState: { elseIfCount: 1, hasElse: true },
+                            inputs: {
+                                IF0: keyDown(37),
+                                DO0: { block: setProp('vx', -5) },
+                                IF1: keyDown(39),
+                                DO1: { block: setProp('vx', 5) },
+                                ELSE: { block: setProp('vx', 0) },
+                            },
+                        },
+                    },
+                },
+                {
+                    type: 'karen_on_key',
+                    x: 20,
+                    y: 760,
+                    fields: { KEY: '32', STATE: 'down' },
+                    next: {
+                        block: {
+                            type: 'controls_if',
+                            inputs: {
+                                IF0: {
+                                    block: {
+                                        type: 'karen_sprite_touching',
+                                        fields: { SIDE: 'bottom' },
+                                        inputs: { SPRITE: player },
+                                    },
+                                },
+                                DO0: { block: setProp('vy', -14) },
+                            },
+                        },
+                    },
+                },
+            ],
+        },
+        variables: [{ name: 'joueur', id: 'var_joueur' }],
+    };
+}
+
+/** A new project with starter content: a few BOB, a heroine, a level and her scripts. */
+export function newProject(): KarenProject {
+    return {
+        name: 'Mon jeu',
+        settings: { tickRate: 30, backgroundColor: '#7ec8f0' },
+        palette: defaultPalette(),
+        bobs: [
+            { id: 1, name: 'Herbe', collision: 'solid', pixels: grass() },
+            { id: 2, name: 'Terre', collision: 'solid', pixels: dirt() },
+            { id: 3, name: 'Brique', collision: 'solid', pixels: brick() },
+            { id: 4, name: 'Plateforme', collision: 'platform', pixels: platform() },
+        ],
+        sprites: [{ id: 1, name: 'Héroïne', tag: 'joueur', pixels: heroine() }],
+        levels: [starterLevel()],
+        code: starterCode(),
+    };
+}
