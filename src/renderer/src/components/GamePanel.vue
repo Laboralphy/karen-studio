@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { GameRuntime } from '@runtime/GameRuntime';
 import { projectSnapshot } from '../store/project';
 
@@ -7,8 +7,41 @@ const SCREEN_W = 640;
 const SCREEN_H = 480;
 
 const canvas = ref<HTMLCanvasElement | null>(null);
+/** HTML layer above the canvas for the interface texts. */
+const hud = ref<HTMLDivElement | null>(null);
+const screen = ref<HTMLDivElement | null>(null);
 const running = ref(false);
 const zoomed = ref(false);
+
+/** Folded panel: more room for the editors. Remembered between sessions. */
+const COLLAPSED_KEY = 'karen.gamePanel.collapsed';
+function readCollapsed(): boolean {
+    try {
+        return localStorage.getItem(COLLAPSED_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+const collapsed = ref(readCollapsed());
+watch(collapsed, (value) => {
+    try {
+        localStorage.setItem(COLLAPSED_KEY, value ? '1' : '0');
+    } catch {
+        // Storage unavailable: the choice is just not remembered.
+    }
+});
+/** Size of the area available for the game screen. */
+const available = ref({ width: SCREEN_W, height: SCREEN_H });
+/**
+ * Scale of the screen (canvas and interface together): 1 normally, as large as fits when
+ * enlarged (2 px kept for the border).
+ */
+const scale = computed(() =>
+    zoomed.value
+        ? Math.min(available.value.width / (SCREEN_W + 4), available.value.height / (SCREEN_H + 4))
+        : 1
+);
+let resizeObserver: ResizeObserver | null = null;
 const error = ref<string | null>(null);
 /** Latest script error; the game keeps running. */
 const scriptError = ref<string | null>(null);
@@ -46,7 +79,7 @@ function start(): void {
     }
     error.value = null;
     scriptError.value = null;
-    if (runtime.start(el, el, projectSnapshot())) {
+    if (runtime.start(el, el, projectSnapshot(), hud.value ?? undefined)) {
         running.value = true;
         el.focus();
     }
@@ -58,19 +91,44 @@ function stop(): void {
     drawIdleScreen();
 }
 
-onMounted(drawIdleScreen);
-onBeforeUnmount(() => runtime.stop());
+onMounted(() => {
+    drawIdleScreen();
+    resizeObserver = new ResizeObserver(([entry]) => {
+        available.value = { width: entry.contentRect.width, height: entry.contentRect.height };
+    });
+    resizeObserver.observe(screen.value!);
+});
+onBeforeUnmount(() => {
+    resizeObserver?.disconnect();
+    runtime.stop();
+});
 </script>
 
 <template>
-    <section class="game-panel" :class="{ zoomed }">
+    <aside v-if="collapsed" class="game-panel-folded">
+        <button title="Afficher l'écran de jeu" @click="collapsed = false">◀</button>
+        <span class="folded-label">Jeu</span>
+        <span v-if="running" class="running-dot" title="Le jeu tourne" />
+    </aside>
+    <section v-show="!collapsed" class="game-panel" :class="{ zoomed }">
         <div class="toolbar">
             <button :disabled="running" @click="start">▶ Démarrer</button>
             <button :disabled="!running" @click="stop">■ Stop</button>
             <button @click="zoomed = !zoomed">{{ zoomed ? '⤡ Réduire' : '⤢ Agrandir' }}</button>
+            <button
+                v-if="!zoomed"
+                class="fold"
+                title="Replier l'écran de jeu pour avoir plus de place"
+                @click="collapsed = true"
+            >
+                ▶
+            </button>
         </div>
-        <div class="screen">
-            <canvas ref="canvas" :width="SCREEN_W" :height="SCREEN_H" tabindex="0" />
+        <div ref="screen" class="screen">
+            <div class="screen-box" :style="{ transform: `scale(${scale})` }">
+                <canvas ref="canvas" :width="SCREEN_W" :height="SCREEN_H" tabindex="0" />
+                <div ref="hud" class="hud" />
+            </div>
         </div>
         <p v-if="error" class="error">Le jeu s'est arrêté : {{ error }}</p>
         <p v-if="scriptError" class="error">{{ scriptError }}</p>
@@ -95,13 +153,58 @@ onBeforeUnmount(() => runtime.stop());
     gap: 8px;
 }
 
+.fold {
+    margin-left: auto;
+}
+
+.game-panel-folded {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 40px;
+    padding: 12px 4px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+}
+
+.game-panel-folded button {
+    padding: 4px 8px;
+}
+
+.folded-label {
+    writing-mode: vertical-rl;
+    color: var(--text-dim);
+}
+
+.running-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #7bd88f;
+}
+
 .screen {
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+.screen-box {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.hud {
+    position: absolute;
+    /* Inside the 2 px canvas border, so positions match the 640×480 game screen. */
+    inset: 2px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
 canvas {
+    display: block;
     width: 640px;
     height: 480px;
     image-rendering: pixelated;
@@ -136,14 +239,6 @@ canvas:focus {
 .game-panel.zoomed .screen {
     flex: 1;
     min-height: 0;
-}
-
-.game-panel.zoomed canvas {
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
-    aspect-ratio: 4 / 3;
-    height: 100%;
+    overflow: hidden;
 }
 </style>

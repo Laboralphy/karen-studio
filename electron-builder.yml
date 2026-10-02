@@ -1,0 +1,21 @@
+# Packaging (npm run dist:win). The renderer is bundled by Vite: no node_modules shipped.
+appId: app.karen-studio
+productName: Karen Studio
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - out/**
+  - resources/icon.png
+  - package.json
+# Kept outside the archive so the window icon can be read as a plain file.
+# (The other images are bundled by Vite in out/renderer.)
+asarUnpack:
+  - resources/**
+win:
+  # Built from Linux/WSL without Wine: the .exe is not edited (no embedded icon/version,
+  # no signature). The window still shows the app icon (set by the main process).
+  signAndEditExecutable: false
+  target:
+    - target: zip
+      arch: [x64]

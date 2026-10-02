@@ -13,6 +13,12 @@ export interface KarenApi {
         path: string | null,
         suggestedName: string
     ): Promise<{ path: string; name: string } | null>;
+    /** Écrit la copie de secours du projet (avec le fichier d'origine, s'il y en a un). */
+    autosaveWrite(content: string, path: string | null): Promise<void>;
+    /** Lit la copie de secours, ou null s'il n'y en a pas. `date` : ISO 8601. */
+    autosaveRead(): Promise<{ content: string; path: string | null; date: string } | null>;
+    /** Efface la copie de secours. */
+    autosaveClear(): Promise<void>;
 }
 
 declare global {

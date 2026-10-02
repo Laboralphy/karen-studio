@@ -129,4 +129,26 @@ describe('Projet de départ (intégration, joué tick par tick)', () => {
         clock.ticks(2);
         expect(runtime.game!.sprites[0].name).toBe('Héroïne');
     });
+
+    it('dessine le ciel du niveau en premier, avec la parallaxe', () => {
+        const project = newProject();
+        project.levels[0].sky.parallax = 0.5;
+        const game = play(project);
+        clock.ticks(40);
+        const ctx = ctxOf(canvas);
+        const firstDraw = () => {
+            ctx.calls.length = 0;
+            clock.ticks(1);
+            const draw = ctx.calls.find((c) => c.name === 'drawImage')!;
+            return draw.args[1] as number;
+        };
+        expect(firstDraw()).toBe(0); // camera at the left edge
+        key(canvas, 'keydown', FairyKeys.RIGHT);
+        clock.ticks(100);
+        const camX = game.camera.x;
+        expect(camX).toBeGreaterThan(0);
+        const x = firstDraw();
+        // Repeated sky: offset = -camera × parallax, wrapped into [-640, 0].
+        expect(x).toBe(-(Math.floor(game.camera.x * 0.5) % 640));
+    });
 });

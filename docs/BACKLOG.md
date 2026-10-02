@@ -3,23 +3,25 @@
 Liste des améliorations repérées en cours de route et volontairement remises à plus tard.
 Le découpage principal en jalons (J0 → J8) est dans `ANALYSE_FAISABILITE.md`.
 
+## Fait
+
+- Panneau de jeu repliable (J8).
+- Annuler / rétablir dans les éditeurs (J8 ; l'onglet Code garde l'annulation de Blockly).
+- Essai d'un exécutable Windows (J8) : `npm run dist:win` → `dist/Karen Studio-<version>-win.zip`.
+
 ## Interface
 
-- **Panneau de jeu repliable** (demandé le 02/10/2026) : le panneau de rendu prend 640 px et
-  serre les éditeurs (la palette passe sous le dessin dans les onglets BOB / Sprites). Pouvoir le
-  replier pendant l'édition, ou le faire passer sous les éditeurs.
-- Annuler / rétablir (Ctrl+Z / Ctrl+Y) dans les éditeurs pixel et niveau (prévu en J8).
-- Outils de niveau supplémentaires : rectangle, remplissage, sélection / copier-coller (J6).
+- Sélection / copier-coller de zones dans l'éditeur de niveau.
+- Plusieurs niveaux visibles dans l'aperçu de l'onglet Interface (aujourd'hui : le premier).
 
 ## Tests
 
-- Test de bout en bout dans Electron (Playwright) : lancer la vraie application, cliquer,
-  comparer des captures. À faire quand l'interface sera stabilisée.
+- Test de bout en bout automatisé de l'application packagée (lancement + protocole de
+  débogage Chromium, comme fait à la main en J8).
 
 ## Distribution
 
-- Essai tôt d'un exécutable Windows (dossier `win-unpacked` via electron-builder) copié sur clé
-  USB, pour valider la chaîne sur l'autre PC.
+- Icône intégrée au `.exe` et installeur : nécessitent Wine (ou un build depuis Windows).
 - Signature de l'exécutable : inutile pour un usage familial par clé USB ; au besoin, certificat
   auto-signé installé sur le PC cible.
 

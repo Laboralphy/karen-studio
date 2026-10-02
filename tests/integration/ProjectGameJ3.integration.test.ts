@@ -43,7 +43,13 @@ const setGravity = (sprite: object, g: number) =>
 /** Starter project with a coin sprite, a second level, and the given scripts. */
 function project(code: object): KarenProject {
     const p = newProject();
-    p.sprites.push({ id: COIN, name: 'Pièce', tag: 'piece', pixels: blankPixels() });
+    p.sprites.push({
+        id: COIN,
+        name: 'Pièce',
+        tag: 'piece',
+        frames: [blankPixels()],
+        animations: [],
+    });
     const level2 = createLevel(2, 'Niveau 2', 30, 15);
     level2.tiles.fill(BRICK, 12 * 30); // brick floor on rows 12–14
     p.levels.push(level2);

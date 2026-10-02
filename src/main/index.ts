@@ -1,6 +1,16 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import icon from '../../resources/icon.png?asset';
+
+/** Safety copy of the project being edited (crash recovery), with its metadata. */
+const autosaveFile = () => join(app.getPath('userData'), 'autosave.karen');
+const autosaveMeta = () => join(app.getPath('userData'), 'autosave.json');
+
+async function clearAutosave(): Promise<void> {
+    await rm(autosaveFile(), { force: true });
+    await rm(autosaveMeta(), { force: true });
+}
 
 /** Filter for project files in open/save dialogs. */
 const PROJECT_FILTERS = [{ name: 'Projet Karen Studio', extensions: ['karen'] }];
@@ -12,6 +22,7 @@ function createWindow(): void {
         minWidth: 1100,
         minHeight: 700,
         title: 'Karen Studio',
+        icon,
         autoHideMenuBar: true,
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
@@ -36,6 +47,8 @@ function createWindow(): void {
             detail: 'Si tu quittes maintenant, elles seront perdues.',
         });
         if (choice === 0) {
+            // Quitting without saving on purpose: the safety copy is not needed.
+            void clearAutosave();
             event.preventDefault();
         }
     });
@@ -53,7 +66,29 @@ function createWindow(): void {
     }
 }
 
+// Windows: Chromium may wrongly consider the window hidden behind other windows ("native
+// occlusion") and then stop drawing and animating it: the game would not run.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+ipcMain.handle('autosave:write', async (_event, content: string, path: string | null) => {
+    await writeFile(autosaveFile(), content, 'utf8');
+    await writeFile(autosaveMeta(), JSON.stringify({ path }), 'utf8');
+});
+
+ipcMain.handle('autosave:read', async () => {
+    try {
+        const content = await readFile(autosaveFile(), 'utf8');
+        const meta = JSON.parse(await readFile(autosaveMeta(), 'utf8')) as { path: string | null };
+        const date = (await stat(autosaveFile())).mtime.toISOString();
+        return { content, path: meta.path, date };
+    } catch {
+        return null;
+    }
+});
+
+ipcMain.handle('autosave:clear', clearAutosave);
 
 ipcMain.handle('project:open', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)!;

@@ -2,7 +2,13 @@ import * as Blockly from 'blockly/core';
 import 'blockly/blocks';
 import { javascriptGenerator } from 'blockly/javascript';
 import * as Fr from 'blockly/msg/fr';
-import { defineKarenBlocks, HAT_TYPES, PROCEDURE_TYPES, setBlocksProject } from './definitions';
+import {
+    defineKarenBlocks,
+    HAT_TYPES,
+    PROCEDURE_TYPES,
+    setBlocksProject,
+    type BlocksProject,
+} from './definitions';
 import { registerKarenGenerators } from './generators';
 import type { KarenProject } from '../project/model';
 
@@ -23,9 +29,7 @@ export function initKarenBlockly(): void {
  * The result is the body of a function taking the script API object (`__k`), which
  * registers the event handlers (generator functions) and declares the variables.
  */
-export function compileProject(
-    project: Pick<KarenProject, 'code' | 'sprites' | 'bobs' | 'levels' | 'sounds'>
-): string {
+export function compileProject(project: Pick<KarenProject, 'code'> & BlocksProject): string {
     initKarenBlockly();
     if (!project.code) {
         return '';
@@ -45,7 +49,20 @@ export function compileProject(
                     block.isEnabled()
             )
             .map((block) => javascriptGenerator.blockToCode(block, true) as string);
-        return javascriptGenerator.finish(scripts.join('\n'));
+        // Let the interface texts read the variables by their block name (« {{score}} »).
+        // The JavaScript names must be asked before `finish`, which resets them.
+        const variables = workspace
+            .getVariableMap()
+            .getAllVariables()
+            .map(
+                (v) =>
+                    `${JSON.stringify(v.getName())}: ${javascriptGenerator.getVariableName(v.getId())}`
+            );
+        let code = javascriptGenerator.finish(scripts.join('\n'));
+        if (variables.length > 0) {
+            code += `\n__k.vars(function () {\n  return { ${variables.join(', ')} };\n});\n`;
+        }
+        return code;
     } finally {
         workspace.dispose();
         setBlocksProject(previous);

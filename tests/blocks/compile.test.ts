@@ -27,6 +27,7 @@ function load(code: string) {
         onKey: () => {},
         ticks: (s: number) => Math.round(s * 30),
         guard: () => scheduler.guard(),
+        vars: () => {},
         log: (v: unknown) => log.push(v),
     };
     new Function('__k', code)(api);
@@ -168,6 +169,7 @@ describe('compilation des blocs (J3)', () => {
                 onStart: (label: string, run: () => ScriptCoroutine) =>
                     scheduler.spawn(label, run()),
                 guard: () => scheduler.guard(),
+                vars: () => {},
             })
         );
         scheduler.tick();
@@ -195,8 +197,8 @@ describe('compilation des blocs (J3)', () => {
 
     it('les événements de sprites reçoivent « ce sprite » et « l’autre sprite »', () => {
         const sprites = [
-            { id: 1, name: 'A', tag: 'joueur', pixels: [] },
-            { id: 2, name: 'B', tag: 'piece', pixels: [] },
+            { id: 1, name: 'A', tag: 'joueur', frames: [[]], animations: [] },
+            { id: 2, name: 'B', tag: 'piece', frames: [[]], animations: [] },
         ];
         const code = compileProject({
             code: ws([

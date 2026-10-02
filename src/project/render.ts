@@ -1,4 +1,4 @@
-import { ASSET_SIZE, TRANSPARENT, type Bob } from './model';
+import { ASSET_SIZE, TRANSPARENT, type Bob, type SpriteAsset } from './model';
 
 /** Parse `#rrggbb` into [r, g, b]. */
 function rgb(color: string): [number, number, number] {
@@ -52,29 +52,77 @@ export function assetCanvas(
 const TILESET_COLS = 16;
 
 /**
- * Build the level tileset: tile 0 is empty (transparent), then one tile per BOB.
- * Returns the image and the tile index of each BOB id.
+ * Build the level tileset: tile 0 is empty (transparent), then the images of each BOB,
+ * consecutively (so an animated BOB is a contiguous range of tiles).
+ * Returns the image and the first tile index of each BOB id.
  */
 export function buildTileset(
     bobs: readonly Bob[],
     palette: readonly string[]
 ): { image: HTMLCanvasElement; tileOf: Map<number, number> } {
-    const count = bobs.length + 1;
+    const count = 1 + bobs.reduce((n, b) => n + b.frames.length, 0);
     const canvas = document.createElement('canvas');
     canvas.width = TILESET_COLS * ASSET_SIZE;
     canvas.height = Math.ceil(count / TILESET_COLS) * ASSET_SIZE;
     const ctx = canvas.getContext('2d')!;
     const tileOf = new Map<number, number>();
-    bobs.forEach((bob, i) => {
-        const tile = i + 1;
+    let tile = 1;
+    for (const bob of bobs) {
         tileOf.set(bob.id, tile);
-        drawAsset(
-            ctx,
-            bob.pixels,
-            palette,
-            (tile % TILESET_COLS) * ASSET_SIZE,
-            Math.floor(tile / TILESET_COLS) * ASSET_SIZE
-        );
-    });
+        for (const frame of bob.frames) {
+            drawAsset(
+                ctx,
+                frame,
+                palette,
+                (tile % TILESET_COLS) * ASSET_SIZE,
+                Math.floor(tile / TILESET_COLS) * ASSET_SIZE
+            );
+            tile++;
+        }
+    }
     return { image: canvas, tileOf };
+}
+
+/** Mirror a 32×32 image horizontally. */
+export function mirrorFrame(frame: readonly number[]): number[] {
+    const out = new Array<number>(frame.length);
+    for (let y = 0; y < ASSET_SIZE; y++) {
+        for (let x = 0; x < ASSET_SIZE; x++) {
+            out[y * ASSET_SIZE + x] = frame[y * ASSET_SIZE + ASSET_SIZE - 1 - x];
+        }
+    }
+    return out;
+}
+
+/** Where each animation lives in a sprite sheet: first cell and number of cells. */
+export interface SheetRange {
+    start: number;
+    count: number;
+}
+
+/**
+ * Build a sprite sheet, one row: cell 0 is the first image (no animation), then the
+ * images of each animation in playing order, so every animation is a contiguous range.
+ * With `mirrored`, every image is flipped horizontally (same layout).
+ */
+export function buildSpriteSheet(
+    sprite: Pick<SpriteAsset, 'frames' | 'animations'>,
+    palette: readonly string[],
+    mirrored = false
+): { image: HTMLCanvasElement; ranges: SheetRange[] } {
+    const cells: number[] = [0];
+    const ranges = sprite.animations.map((a) => {
+        const range = { start: cells.length, count: a.frames.length };
+        cells.push(...a.frames);
+        return range;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = cells.length * ASSET_SIZE;
+    canvas.height = ASSET_SIZE;
+    const ctx = canvas.getContext('2d')!;
+    cells.forEach((frameIndex, cell) => {
+        const frame = sprite.frames[frameIndex] ?? sprite.frames[0];
+        drawAsset(ctx, mirrored ? mirrorFrame(frame) : frame, palette, cell * ASSET_SIZE, 0);
+    });
+    return { image: canvas, ranges };
 }

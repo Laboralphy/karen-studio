@@ -6,6 +6,9 @@ const api: KarenApi = {
     openProject: () => ipcRenderer.invoke('project:open'),
     saveProject: (content, path, suggestedName) =>
         ipcRenderer.invoke('project:save', content, path, suggestedName),
+    autosaveWrite: (content, path) => ipcRenderer.invoke('autosave:write', content, path),
+    autosaveRead: () => ipcRenderer.invoke('autosave:read'),
+    autosaveClear: () => ipcRenderer.invoke('autosave:clear'),
 };
 
 contextBridge.exposeInMainWorld('karen', api);

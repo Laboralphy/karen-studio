@@ -22,6 +22,8 @@ export const TOOLBOX = {
                 label('Événements de sprites'),
                 block('karen_on_sprite_tile'),
                 block('karen_on_sprite_sprite'),
+                block('karen_on_sprite_marker'),
+                block('karen_on_animation_end'),
                 block('karen_event_self'),
                 block('karen_event_other'),
             ],
@@ -101,6 +103,8 @@ export const TOOLBOX = {
                 block('karen_sprite_move', { inputs: { DX: num(10), DY: num(0) } }),
                 block('karen_sprite_touching'),
                 block('karen_sprite_destroy'),
+                block('karen_sprite_animate'),
+                block('karen_sprite_face'),
             ],
         },
         {
@@ -112,6 +116,8 @@ export const TOOLBOX = {
                 block('karen_level_tile_is', { inputs: { X: num(0), Y: num(0) } }),
                 block('karen_level_cell_of'),
                 block('karen_level_goto'),
+                block('karen_marker_pos', { inputs: { N: num(1) } }),
+                block('karen_marker_count'),
             ],
         },
         {
@@ -123,6 +129,15 @@ export const TOOLBOX = {
                 block('karen_sound_play_wait'),
                 block('karen_sound_stop'),
                 block('karen_sound_stop_all'),
+            ],
+        },
+        {
+            kind: 'category',
+            name: 'Interface',
+            colour: COLORS.hud,
+            contents: [
+                block('karen_hud_show'),
+                block('karen_hud_set', { inputs: { VALUE: text('Bravo !') } }),
             ],
         },
         {

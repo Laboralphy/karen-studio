@@ -1,3 +1,6 @@
+import type { Sky } from './sky';
+import type { HudText } from './hud';
+
 /**
  * Karen Studio project model (in memory).
  * The on-disk format (`.karen`, JSON) is handled by `serialize.ts`.
@@ -17,14 +20,31 @@ export const EMPTY_TILE = 0;
 /** How a BOB behaves for sprites. */
 export type BobCollision = 'air' | 'solid' | 'platform';
 
-/** Background object: a 32×32 level element. */
+/** One image of an asset: `ASSET_PIXELS` palette indices, row by row. */
+export type Frame = number[];
+
+/** Background object: a 32×32 level element, possibly animated. */
 export interface Bob {
     /** Stable identifier (> 0), referenced by level tiles. */
     id: number;
     name: string;
     collision: BobCollision;
-    /** `ASSET_PIXELS` palette indices, row by row. */
-    pixels: number[];
+    /** At least one image. With several, the BOB is animated (they loop in order). */
+    frames: Frame[];
+    /** Ticks each image is shown, when animated. */
+    frameDuration: number;
+}
+
+/** A named animation of a sprite: a sequence of its images. */
+export interface SpriteAnimation {
+    /** Name used by the « changer l'animation » block. */
+    name: string;
+    /** Indices (0-based) in the sprite's `frames`, in playing order. */
+    frames: number[];
+    /** Ticks each image is shown. */
+    frameDuration: number;
+    /** Loop forever; otherwise stop on the last image (« animation terminée »). */
+    loop: boolean;
 }
 
 /** Sprite model: what « créer sprite » instantiates. */
@@ -34,8 +54,18 @@ export interface SpriteAsset {
     name: string;
     /** Tag used by generic events (« sprite de tag … touche … »). */
     tag: string;
-    /** `ASSET_PIXELS` palette indices, row by row. */
-    pixels: number[];
+    /** At least one image; the first one is shown when no animation plays. */
+    frames: Frame[];
+    /** The first animation (if any) starts when the sprite is created. */
+    animations: SpriteAnimation[];
+}
+
+/** A point of a level that scripts can refer to by its tag (start, exit, enemy…). */
+export interface Marker {
+    id: number;
+    tag: string;
+    col: number;
+    row: number;
 }
 
 /** Sound effect, synthesised by jsfxr from its parameters. */
@@ -56,13 +86,15 @@ export interface Level {
     rows: number;
     /** `cols * rows` BOB ids (or `EMPTY_TILE`), row by row. */
     tiles: number[];
+    /** Background picture, scrolled with parallax. */
+    sky: Sky;
+    /** Tagged points, invisible in the game. */
+    markers: Marker[];
 }
 
 export interface ProjectSettings {
     /** Logic ticks per second. */
     tickRate: 20 | 30;
-    /** Colour behind the level (CSS colour). */
-    backgroundColor: string;
 }
 
 export interface KarenProject {
@@ -73,6 +105,8 @@ export interface KarenProject {
     bobs: Bob[];
     sprites: SpriteAsset[];
     sounds: SoundAsset[];
+    /** Texts shown above the game. */
+    hud: HudText[];
     /** The first level is the one the game starts on. */
     levels: Level[];
     /** Blockly workspace (`Blockly.serialization.workspaces.save`), or null when empty. */

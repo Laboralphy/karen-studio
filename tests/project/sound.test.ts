@@ -9,7 +9,8 @@ import {
     PRESETS,
     synthParams,
 } from '@project/sound';
-import { loadProject, saveProject } from '@project/serialize';
+import { loadProject } from '@project/serialize';
+import { starterAsV3 } from '../helpers/oldFiles';
 import { SoundPlayer } from '@runtime/SoundPlayer';
 
 describe('sons', () => {
@@ -62,8 +63,7 @@ describe('sons', () => {
     });
 
     it('ouvre un fichier de version 1 (sans sons) grâce à la migration', () => {
-        const v2 = JSON.parse(saveProject(newProject()));
-        const v1 = { ...v2, version: 1 };
+        const v1: Record<string, unknown> = { ...starterAsV3(), version: 1 };
         delete v1.sounds;
         const project = loadProject(JSON.stringify(v1));
         expect(project.sounds).toEqual([]);

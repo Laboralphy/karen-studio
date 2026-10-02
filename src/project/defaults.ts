@@ -2,6 +2,7 @@ import { createLevel } from './level';
 import { blankPixels } from './pixels';
 import { defaultPalette } from './palette';
 import { normalizeSoundParams } from './sound';
+import { defaultHudText } from './hud';
 import { ASSET_SIZE, type KarenProject, type Level } from './model';
 
 /** Palette indices (default palette, DB32 part) used by the starter art. */
@@ -97,16 +98,23 @@ function platform(): number[] {
         .rect(15, 2, 2, 8, C.brown).pixels;
 }
 
-function heroine(): number[] {
-    return new Painter(5)
+/** The heroine, facing right: `step` 0 = standing, 1 and 2 = walking. */
+function heroine(step: 0 | 1 | 2): number[] {
+    const p = new Painter(5)
         .rect(9, 2, 14, 6, C.brownDark) // hair
         .rect(7, 4, 4, 12, C.brownDark)
         .rect(11, 6, 12, 9, C.skin) // face
         .rect(19, 9, 2, 2, C.navy) // eye
         .rect(10, 15, 13, 9, C.magenta) // shirt
-        .rect(21, 17, 3, 5, C.skin) // arm
-        .rect(12, 24, 4, 8, C.blueDark) // legs
-        .rect(18, 24, 4, 8, C.blueDark).pixels;
+        .rect(step === 1 ? 22 : 21, 17, 3, 5, C.skin); // arm
+    if (step === 0) {
+        p.rect(12, 24, 4, 8, C.blueDark).rect(18, 24, 4, 8, C.blueDark);
+    } else if (step === 1) {
+        p.rect(10, 24, 4, 7, C.blueDark).rect(19, 24, 4, 8, C.blueDark);
+    } else {
+        p.rect(13, 24, 4, 8, C.blueDark).rect(16, 24, 4, 7, C.blueDark);
+    }
+    return p.pixels;
 }
 
 /** Starter level: ground, a pit, platforms and a brick wall. BOB ids: see `newProject`. */
@@ -132,7 +140,8 @@ function starterLevel(): Level {
 
 /**
  * Starter scripts, as a Blockly workspace: at each level start, create the heroine
- * (gravity, camera); run with ← →; jump with space when on the ground.
+ * (gravity, camera); run with ← → (facing and walking animation); jump with space
+ * when on the ground.
  */
 function starterCode(): object {
     const num = (n: number) => ({ shadow: { type: 'math_number', fields: { NUM: n } } });
@@ -142,6 +151,17 @@ function starterCode(): object {
         fields: { PROP: prop },
         inputs: { SPRITE: player, VALUE: num(value) },
         ...(next ? { next: { block: next } } : {}),
+    });
+    const animate = (name: string) => ({
+        type: 'karen_sprite_animate',
+        fields: { ANIM: name },
+        inputs: { SPRITE: player },
+    });
+    const face = (side: 'left' | 'right', next: object) => ({
+        type: 'karen_sprite_face',
+        fields: { SIDE: side },
+        inputs: { SPRITE: player },
+        next: { block: next },
     });
     const keyDown = (key: number) => ({
         block: { type: 'karen_key_down', fields: { KEY: String(key) } },
@@ -186,10 +206,10 @@ function starterCode(): object {
                             extraState: { elseIfCount: 1, hasElse: true },
                             inputs: {
                                 IF0: keyDown(37),
-                                DO0: { block: setProp('vx', -5) },
+                                DO0: { block: setProp('vx', -5, face('left', animate('marche'))) },
                                 IF1: keyDown(39),
-                                DO1: { block: setProp('vx', 5) },
-                                ELSE: { block: setProp('vx', 0) },
+                                DO1: { block: setProp('vx', 5, face('right', animate('marche'))) },
+                                ELSE: { block: setProp('vx', 0, animate('repos')) },
                             },
                         },
                     },
@@ -197,7 +217,7 @@ function starterCode(): object {
                 {
                     type: 'karen_on_key',
                     x: 20,
-                    y: 760,
+                    y: 980,
                     fields: { KEY: '32', STATE: 'down' },
                     next: {
                         block: {
@@ -230,15 +250,43 @@ function starterCode(): object {
 export function newProject(): KarenProject {
     return {
         name: 'Mon jeu',
-        settings: { tickRate: 30, backgroundColor: '#7ec8f0' },
+        settings: { tickRate: 30 },
         palette: defaultPalette(),
         bobs: [
-            { id: 1, name: 'Herbe', collision: 'solid', pixels: grass() },
-            { id: 2, name: 'Terre', collision: 'solid', pixels: dirt() },
-            { id: 3, name: 'Brique', collision: 'solid', pixels: brick() },
-            { id: 4, name: 'Plateforme', collision: 'platform', pixels: platform() },
+            { id: 1, name: 'Herbe', collision: 'solid', frames: [grass()], frameDuration: 8 },
+            { id: 2, name: 'Terre', collision: 'solid', frames: [dirt()], frameDuration: 8 },
+            { id: 3, name: 'Brique', collision: 'solid', frames: [brick()], frameDuration: 8 },
+            {
+                id: 4,
+                name: 'Plateforme',
+                collision: 'platform',
+                frames: [platform()],
+                frameDuration: 8,
+            },
         ],
-        sprites: [{ id: 1, name: 'Héroïne', tag: 'joueur', pixels: heroine() }],
+        sprites: [
+            {
+                id: 1,
+                name: 'Héroïne',
+                tag: 'joueur',
+                frames: [heroine(0), heroine(1), heroine(2)],
+                animations: [
+                    { name: 'repos', frames: [0], frameDuration: 8, loop: true },
+                    { name: 'marche', frames: [1, 0, 2, 0], frameDuration: 4, loop: true },
+                ],
+            },
+        ],
+        hud: [
+            { ...defaultHudText(1), name: 'niveau', template: '{{niveau}}', size: 14 },
+            {
+                ...defaultHudText(2),
+                name: 'temps',
+                template: 'Temps : {{temps}}',
+                anchor: 'top-right',
+                size: 14,
+                color: '#fbf236',
+            },
+        ],
         sounds: [
             {
                 id: 1,

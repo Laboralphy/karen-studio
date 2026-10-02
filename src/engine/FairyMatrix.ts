@@ -1,4 +1,5 @@
 import { FairyTile } from './FairyTile.js';
+import { LoopType } from './FairyAnimation.js';
 import type { FairyImage } from './FairyImage.js';
 import type { IFairyLayer } from './IFairyLayer.js';
 
@@ -169,6 +170,22 @@ export class FairyMatrix implements IFairyLayer {
         this._dynamicTiles = this._dynamicTiles.filter((e) => e.tile !== tile);
         if (!this._invalid) {
             this._drawTile(x, y);
+        }
+    }
+
+    /**
+     * Animate the tile at `(x, y)`: it loops through `count` graphics starting at `start`,
+     * each shown for `duration` ticks. Only that cell is redrawn.
+     */
+    setTileAnimation(x: number, y: number, start: number, count: number, duration: number): void {
+        const tile = this.getTile(x, y);
+        tile.oAnimation.setFrameRange(start, count);
+        tile.oAnimation.setLoop(LoopType.Forward, 1, duration, 0);
+        tile.setGfx(start);
+        this._dynamicTiles = this._dynamicTiles.filter((e) => e.tile !== tile);
+        if (!this._invalid) {
+            this._drawTile(x, y);
+            this._dynamicTiles.push({ x, y, tile });
         }
     }
 

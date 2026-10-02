@@ -53,14 +53,6 @@ const onSaveAs = () => run(() => saveProjectFile(true), 'Projet enregistré.');
                     <option :value="20">20 ticks par seconde (rétro)</option>
                 </select>
             </label>
-            <label>
-                Couleur du fond
-                <input
-                    v-model="store.project.settings.backgroundColor"
-                    type="color"
-                    @input="touch"
-                />
-            </label>
         </section>
     </div>
 </template>

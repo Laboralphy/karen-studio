@@ -191,4 +191,40 @@ export function registerKarenGenerators(): void {
         const label = `quand le son ${b.getField('SOUND')?.getText() ?? ''} est terminé`;
         return hat(b, g, `onSoundEnd(${sound(b)}, `, label);
     };
+
+    // ── Animations and markers ────────────────────────────────────────────────
+    gen.forBlock['karen_sprite_animate'] = (b, g) =>
+        `${API}.setAnimation(${sprite(b, g)}, ${str(b.getFieldValue('ANIM'))});\n`;
+    gen.forBlock['karen_sprite_face'] = (b, g) =>
+        `${API}.face(${sprite(b, g)}, ${str(b.getFieldValue('SIDE') === 'left' ? 'left' : 'right')});\n`;
+    gen.forBlock['karen_on_animation_end'] = (b, g) => {
+        const tag = b.getFieldValue('TAG') as string;
+        return hat(
+            b,
+            g,
+            `onAnimationEnd(${str(tag)}, `,
+            `quand l'animation d'un sprite ${tag} est terminée`,
+            SELF
+        );
+    };
+    gen.forBlock['karen_on_sprite_marker'] = (b, g) => {
+        const tag = b.getFieldValue('TAG') as string;
+        const marker = b.getFieldValue('MARKER') as string;
+        const label = `quand un sprite ${tag} touche le marqueur ${marker}`;
+        return hat(b, g, `onSpriteMarker(${str(tag)}, ${str(marker)}, `, label, SELF);
+    };
+    gen.forBlock['karen_marker_pos'] = (b, g) => [
+        `${API}.markerPos(${str(b.getFieldValue('MARKER'))}, ${str(b.getFieldValue('AXIS') === 'y' ? 'y' : 'x')}, ${value(b, g, 'N', '1')})`,
+        Order.FUNCTION_CALL,
+    ];
+    gen.forBlock['karen_marker_count'] = (b) => [
+        `${API}.markerCount(${str(b.getFieldValue('MARKER'))})`,
+        Order.FUNCTION_CALL,
+    ];
+
+    // ── Interface ─────────────────────────────────────────────────────────────
+    gen.forBlock['karen_hud_show'] = (b) =>
+        `${API}.hudShow(${Number(b.getFieldValue('TEXT'))}, ${b.getFieldValue('MODE') !== 'hide'});\n`;
+    gen.forBlock['karen_hud_set'] = (b, g) =>
+        `${API}.hudSet(${Number(b.getFieldValue('TEXT'))}, ${value(b, g, 'VALUE', '""')});\n`;
 }

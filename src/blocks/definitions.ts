@@ -3,7 +3,8 @@ import { KEY_OPTIONS } from './keys';
 import type { KarenProject } from '../project/model';
 
 /** The parts of a project the dynamic dropdowns (sprites, tags, BOB, levels) read. */
-export type BlocksProject = Pick<KarenProject, 'sprites' | 'bobs' | 'levels' | 'sounds'>;
+export type BlocksProject = Pick<KarenProject, 'sprites' | 'bobs' | 'levels' | 'sounds'> &
+    Partial<Pick<KarenProject, 'hud'>>;
 
 let currentProject: () => BlocksProject = () => ({ sprites: [], bobs: [], levels: [], sounds: [] });
 
@@ -42,6 +43,27 @@ export const bobOptions = (): Options => [
     ['(vide)', '0'],
     ...currentProject().bobs.map((b): [string, string] => [b.name, String(b.id)]),
 ];
+/** Animation names of all sprites: [name, name]. */
+export const animationOptions = dynamic(
+    (p) =>
+        [...new Set(p.sprites.flatMap((s) => s.animations.map((a) => a.name)))].map((n) => [n, n]),
+    '(aucune animation)'
+);
+/** Marker tags of all levels: [tag, tag]. */
+export const markerOptions = dynamic(
+    (p) =>
+        [
+            ...new Set(
+                p.levels.flatMap((l) => l.markers.map((m) => m.tag.trim())).filter((t) => t)
+            ),
+        ].map((t) => [t, t]),
+    '(aucun marqueur)'
+);
+/** Interface texts: [name, id]. */
+export const hudOptions = dynamic(
+    (p) => (p.hud ?? []).map((t) => [t.name, String(t.id)]),
+    '(aucun texte)'
+);
 /** Sounds: [name, id]. */
 export const soundOptions = dynamic(
     (p) => p.sounds.map((s) => [s.name, String(s.id)]),
@@ -80,9 +102,16 @@ export const HAT_TYPES = new Set([
     'karen_on_sprite_tile',
     'karen_on_sprite_sprite',
     'karen_on_sound_end',
+    'karen_on_animation_end',
+    'karen_on_sprite_marker',
 ]);
-/** Hats whose scripts receive « ce sprite » (and « l'autre sprite » for the second one). */
-export const SPRITE_EVENT_TYPES = new Set(['karen_on_sprite_tile', 'karen_on_sprite_sprite']);
+/** Hats whose scripts receive « ce sprite » (and « l'autre sprite » for the pair event). */
+export const SPRITE_EVENT_TYPES = new Set([
+    'karen_on_sprite_tile',
+    'karen_on_sprite_sprite',
+    'karen_on_animation_end',
+    'karen_on_sprite_marker',
+]);
 /** Function definitions: compiled too, since event scripts call them. */
 export const PROCEDURE_TYPES = new Set(['procedures_defnoreturn', 'procedures_defreturn']);
 
@@ -98,6 +127,7 @@ export const COLORS = {
     dicts: '#b5527a',
     level: '#8a6d3b',
     sound: '#c94fd6',
+    hud: '#2f9fd6',
 };
 
 let defined = false;
@@ -557,6 +587,140 @@ export function defineKarenBlocks(): void {
             this.setColour(COLORS.events);
             this.setTooltip(
                 'Exécute les blocs en dessous quand ce son finit de jouer (pas quand il est arrêté).'
+            );
+        },
+    };
+
+    Blockly.Blocks['karen_sprite_animate'] = {
+        init(this: Blockly.Block) {
+            this.appendValueInput('SPRITE').appendField("changer l'animation de");
+            this.appendDummyInput()
+                .appendField('en')
+                .appendField(new Blockly.FieldDropdown(animationOptions), 'ANIM');
+            this.setInputsInline(true);
+            this.setPreviousStatement(true);
+            this.setNextStatement(true);
+            this.setColour(COLORS.sprites);
+            this.setTooltip(
+                "Joue une animation du sprite (si elle joue déjà, elle n'est pas relancée)."
+            );
+        },
+    };
+
+    Blockly.Blocks['karen_sprite_face'] = {
+        init(this: Blockly.Block) {
+            this.appendValueInput('SPRITE').appendField('tourner');
+            this.appendDummyInput()
+                .appendField('vers la')
+                .appendField(
+                    new Blockly.FieldDropdown([
+                        ['droite', 'right'],
+                        ['gauche', 'left'],
+                    ]),
+                    'SIDE'
+                );
+            this.setInputsInline(true);
+            this.setPreviousStatement(true);
+            this.setNextStatement(true);
+            this.setColour(COLORS.sprites);
+            this.setTooltip('Retourne le dessin du sprite (il est dessiné tourné vers la droite).');
+        },
+    };
+
+    Blockly.Blocks['karen_on_animation_end'] = {
+        init(this: Blockly.Block) {
+            this.appendDummyInput()
+                .appendField("quand l'animation d'un sprite")
+                .appendField(new Blockly.FieldDropdown(tagOptions), 'TAG')
+                .appendField('est terminée');
+            this.setNextStatement(true);
+            this.setColour(COLORS.events);
+            this.setTooltip(
+                'Quand une animation qui ne boucle pas arrive à sa dernière image. Utilise « ce sprite ».'
+            );
+        },
+    };
+
+    Blockly.Blocks['karen_on_sprite_marker'] = {
+        init(this: Blockly.Block) {
+            this.appendDummyInput()
+                .appendField('quand un sprite')
+                .appendField(new Blockly.FieldDropdown(tagOptions), 'TAG')
+                .appendField('touche le marqueur')
+                .appendField(new Blockly.FieldDropdown(markerOptions), 'MARKER');
+            this.setNextStatement(true);
+            this.setColour(COLORS.events);
+            this.setTooltip(
+                'Quand un sprite de ce tag est sur la case d’un marqueur. Utilise « ce sprite ».'
+            );
+        },
+    };
+
+    Blockly.Blocks['karen_marker_pos'] = {
+        init(this: Blockly.Block) {
+            this.appendDummyInput()
+                .appendField(
+                    new Blockly.FieldDropdown([
+                        ['position x', 'x'],
+                        ['position y', 'y'],
+                    ]),
+                    'AXIS'
+                )
+                .appendField('du marqueur')
+                .appendField(new Blockly.FieldDropdown(markerOptions), 'MARKER');
+            this.appendValueInput('N').setCheck('Number').appendField('n°');
+            this.setInputsInline(true);
+            this.setOutput(true, 'Number');
+            this.setColour(COLORS.level);
+            this.setTooltip(
+                'Position (en pixels, coin haut-gauche) d’un marqueur du niveau. ' +
+                    'S’il y en a plusieurs avec ce tag, n° 1 est le premier posé.'
+            );
+        },
+    };
+
+    Blockly.Blocks['karen_marker_count'] = {
+        init(this: Blockly.Block) {
+            this.appendDummyInput()
+                .appendField('nombre de marqueurs')
+                .appendField(new Blockly.FieldDropdown(markerOptions), 'MARKER');
+            this.setOutput(true, 'Number');
+            this.setColour(COLORS.level);
+            this.setTooltip('Combien de marqueurs de ce tag le niveau contient.');
+        },
+    };
+
+    Blockly.Blocks['karen_hud_show'] = {
+        init(this: Blockly.Block) {
+            this.appendDummyInput()
+                .appendField(
+                    new Blockly.FieldDropdown([
+                        ['afficher', 'show'],
+                        ['cacher', 'hide'],
+                    ]),
+                    'MODE'
+                )
+                .appendField('le texte')
+                .appendField(new Blockly.FieldDropdown(hudOptions), 'TEXT');
+            this.setPreviousStatement(true);
+            this.setNextStatement(true);
+            this.setColour(COLORS.hud);
+            this.setTooltip("Montre ou cache un texte de l'onglet Interface.");
+        },
+    };
+
+    Blockly.Blocks['karen_hud_set'] = {
+        init(this: Blockly.Block) {
+            this.appendValueInput('VALUE')
+                .appendField('changer le texte')
+                .appendField(new Blockly.FieldDropdown(hudOptions), 'TEXT')
+                .appendField('en');
+            this.setInputsInline(true);
+            this.setPreviousStatement(true);
+            this.setNextStatement(true);
+            this.setColour(COLORS.hud);
+            this.setTooltip(
+                'Remplace le contenu du texte (les {{variables}} y sont permises), par exemple « Bravo ! ».'
             );
         },
     };

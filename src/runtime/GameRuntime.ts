@@ -2,6 +2,7 @@ import { compileProject } from '../blocks/compile';
 import type { KarenProject } from '../project/model';
 import { ProjectGame } from './ProjectGame';
 import { SoundPlayer } from './SoundPlayer';
+import { HudLayer } from './HudLayer';
 
 let sharedContext: AudioContext | null | undefined;
 
@@ -20,6 +21,7 @@ function audioContext(): AudioContext | null {
  */
 export class GameRuntime {
     private _game: ProjectGame | null = null;
+    private _hud: HudLayer | null = null;
 
     /** Called when the game cannot start or stops because of an error. */
     onError: ((message: string) => void) | null = null;
@@ -39,9 +41,15 @@ export class GameRuntime {
     /**
      * Start `project` on `canvas`. Keyboard input is read from `inputTarget`
      * (a focusable element), so typing elsewhere in the editor does not drive the game.
+     * The interface texts are put in `hudHost` (an element above the canvas), if given.
      * Returns false (and calls `onError`) when the project cannot be started.
      */
-    start(canvas: HTMLCanvasElement, inputTarget: HTMLElement, project: KarenProject): boolean {
+    start(
+        canvas: HTMLCanvasElement,
+        inputTarget: HTMLElement,
+        project: KarenProject,
+        hudHost?: HTMLElement
+    ): boolean {
         this.stop();
         const snapshot = structuredClone(project);
         let code: string;
@@ -53,7 +61,13 @@ export class GameRuntime {
         }
         const context = audioContext();
         void context?.resume();
-        const game = new ProjectGame(snapshot, code, new SoundPlayer(context));
+        this._hud = hudHost ? new HudLayer(hudHost, snapshot.hud) : null;
+        const game = new ProjectGame(
+            snapshot,
+            code,
+            new SoundPlayer(context),
+            this._hud ?? undefined
+        );
         game.setCanvas(canvas);
         game.setInputTarget(inputTarget);
         game.onScriptError = (message) => this.onScriptError?.(message);
@@ -70,5 +84,7 @@ export class GameRuntime {
     stop(): void {
         this._game?.destroy();
         this._game = null;
+        this._hud?.destroy();
+        this._hud = null;
     }
 }

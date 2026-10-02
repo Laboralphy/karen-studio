@@ -3,15 +3,15 @@ import { computed } from 'vue';
 import { assetCanvas } from '@project/render';
 
 const props = defineProps<{
-    items: { id: number; name: string; pixels: number[] }[];
+    items: { id: number; name: string; frames: number[][] }[];
     palette: string[];
 }>();
 const emit = defineEmits<{ add: []; duplicate: []; remove: [] }>();
 const selected = defineModel<number | null>({ required: true });
 
-/** Thumbnail data URL of each item, recomputed when its pixels or the palette change. */
+/** Thumbnail (first image) of each item, recomputed when it or the palette changes. */
 const thumbnails = computed(() =>
-    props.items.map((item) => assetCanvas(item.pixels, props.palette).toDataURL())
+    props.items.map((item) => assetCanvas(item.frames[0], props.palette).toDataURL())
 );
 </script>
 

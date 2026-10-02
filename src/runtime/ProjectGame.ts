@@ -1,6 +1,6 @@
 import { FairyEngine } from '@fairy/FairyEngine';
 import { FairyCamera } from '@fairy/FairyCamera';
-import { FairyAnimation } from '@fairy/FairyAnimation';
+import { FairyAnimation, LoopType } from '@fairy/FairyAnimation';
 import type { Fairy } from '@fairy/Fairy';
 import type { Fairies } from '@fairy/Fairies';
 import type { FairyFlight } from '@fairy/FairyFlight';
@@ -19,11 +19,16 @@ import {
     EMPTY_TILE,
     type BobCollision,
     type KarenProject,
+    type Marker,
     type SpriteAsset,
 } from '../project/model';
-import { assetCanvas, buildTileset } from '../project/render';
+import { buildSpriteSheet, buildTileset, type SheetRange } from '../project/render';
+import { renderSky, SKY_HEIGHT, SKY_WIDTH } from '../project/sky';
+import type { FairyLayer } from '@fairy/FairyLayer';
 import { Scheduler, type ScriptCoroutine, type ScriptThread } from './Scheduler';
 import { SoundPlayer, type SoundHandle } from './SoundPlayer';
+import { NO_HUD, type HudOutput } from './HudLayer';
+import { displayValue } from '../project/hud';
 
 const SCREEN_W = 640;
 const SCREEN_H = 480;
@@ -53,6 +58,11 @@ export class SpriteInstance {
     readonly id = SpriteInstance._nextId++;
     contacts: TileContacts = { left: false, right: false, top: false, bottom: false };
     alive = true;
+    /** Index in `fairy.aAnimations` of the animation playing (0 = still first image). */
+    animation = 0;
+    /** True once « animation terminée » was fired for the current animation. */
+    animationEndFired = false;
+    facingLeft = false;
 
     constructor(
         readonly asset: SpriteAsset,
@@ -72,6 +82,19 @@ export class SpriteInstance {
     get touchesTile(): boolean {
         const c = this.contacts;
         return c.left || c.right || c.top || c.bottom;
+    }
+
+    /** True if the sprite's 32×32 square overlaps the cell `(col, row)`. */
+    overlapsCell(col: number, row: number): boolean {
+        const a = this.fairy.oFlight.vPosition;
+        const x = col * ASSET_SIZE;
+        const y = row * ASSET_SIZE;
+        return (
+            a.x < x + ASSET_SIZE &&
+            x < a.x + ASSET_SIZE &&
+            a.y < y + ASSET_SIZE &&
+            y < a.y + ASSET_SIZE
+        );
     }
 
     /** True if the 32×32 squares of both sprites overlap. */
@@ -116,6 +139,8 @@ export interface ScriptApi {
     onSpriteTile(tag: string, label: string, run: ScriptBody): void;
     onSpriteSprite(tag: string, other: string, label: string, run: ScriptBody): void;
     onSoundEnd(soundId: number, label: string, run: ScriptBody): void;
+    onAnimationEnd(tag: string, label: string, run: ScriptBody): void;
+    onSpriteMarker(tag: string, markerTag: string, label: string, run: ScriptBody): void;
     /** « ce sprite » used outside a sprite event: always throws. */
     noEventSprite(block: string): never;
     keyDown(key: number): boolean;
@@ -147,6 +172,16 @@ export interface ScriptApi {
     playSound(soundId: number): number;
     stopSound(soundId: number): void;
     stopAllSounds(): void;
+    /** Play one of the sprite's animations (by name); no restart if it is already playing. */
+    setAnimation(sprite: unknown, name: string): void;
+    face(sprite: unknown, side: 'left' | 'right'): void;
+    /** Pixel position (top-left) of the n-th (1-based) marker with this tag. */
+    markerPos(tag: string, axis: 'x' | 'y', n: unknown): number;
+    markerCount(tag: string): number;
+    /** Called once by compiled code: gives the block variables by name (for the interface). */
+    vars(getter: () => Record<string, unknown>): void;
+    hudShow(textId: number, visible: boolean): void;
+    hudSet(textId: number, template: unknown): void;
 }
 
 /** Labels of the sprite properties, for error messages. */
@@ -166,9 +201,13 @@ export class ProjectGame extends FairyEngine {
     private readonly _scheduler = new Scheduler();
     private readonly _cam = new FairyCamera(SCREEN_W, SCREEN_H);
     private _matrix!: FairyMatrix;
+    /** Sky behind the level, scrolled with parallax. */
+    private _sky!: FairyLayer;
     private _spriteLayer!: Fairies;
     private _sprites: SpriteInstance[] = [];
     private _follow: SpriteInstance | null = null;
+    /** BOB by id. */
+    private _bobs = new Map<number, KarenProject['bobs'][number]>();
     /** Tile index of each BOB id in the generated tileset. */
     private _tileOf = new Map<number, number>();
     /** Collision code of each BOB id. */
@@ -186,10 +225,16 @@ export class ProjectGame extends FairyEngine {
     private readonly _tileHandlers: { tag: string; handler: Handler }[] = [];
     private readonly _pairHandlers: { tag: string; other: string; handler: Handler }[] = [];
     private readonly _soundEndHandlers: { soundId: number; handler: Handler }[] = [];
+    private readonly _animationEndHandlers: { tag: string; handler: Handler }[] = [];
+    private readonly _markerHandlers: { tag: string; marker: string; handler: Handler }[] = [];
+    /** Sprite sheet layout: for each sprite id, the cells of each animation. */
+    private readonly _sheets = new Map<number, SheetRange[]>();
     /** Sounds being played, with the tick at which they end. */
     private _playing: { soundId: number; endTick: number; handle: SoundHandle | null }[] = [];
     /** Number of running ticks so far. */
     private _tick = 0;
+    /** Block variables by name (set by the compiled code). */
+    private _vars: () => Record<string, unknown> = () => ({});
     /**
      * Last thread started by each handler (per sprite or sprite pair for sprite events),
      * to avoid piling up unfinished runs.
@@ -206,7 +251,8 @@ export class ProjectGame extends FairyEngine {
     constructor(
         private readonly _project: KarenProject,
         private readonly _code: string,
-        private readonly _audio: SoundPlayer = new SoundPlayer(null)
+        private readonly _audio: SoundPlayer = new SoundPlayer(null),
+        private readonly _hud: HudOutput = NO_HUD
     ) {
         super();
         this._scheduler.onError = (thread, error) => {
@@ -242,7 +288,16 @@ export class ProjectGame extends FairyEngine {
         this.addImage('tiles', tileset.image);
         this._tileOf = tileset.tileOf;
         for (const sprite of p.sprites) {
-            this.addImage(`sprite:${sprite.id}`, assetCanvas(sprite.pixels, p.palette));
+            const sheet = buildSpriteSheet(sprite, p.palette);
+            this.addImage(`sprite:${sprite.id}`, sheet.image);
+            this.addImage(
+                `sprite:${sprite.id}:left`,
+                buildSpriteSheet(sprite, p.palette, true).image
+            );
+            this._sheets.set(sprite.id, sheet.ranges);
+        }
+        for (const level of p.levels) {
+            this.addImage(`sky:${level.id}`, renderSky(level.sky));
         }
         this._audio.prepare(p.sounds);
     }
@@ -251,12 +306,11 @@ export class ProjectGame extends FairyEngine {
         const p = this._project;
         const first = p.levels[0];
 
-        const background = this.createCanvasLayer();
-        const bg = background.canvas.getContext('2d')!;
-        bg.fillStyle = p.settings.backgroundColor;
-        bg.fillRect(0, 0, SCREEN_W, SCREEN_H);
+        this._sky = this.createBackgroundLayer(`sky:${first.id}`, SKY_WIDTH, SKY_HEIGHT);
+        this._sky.setRepeatX(true);
 
         this._collisionOf = new Map(p.bobs.map((b) => [b.id, COLLISION_CODES[b.collision]]));
+        this._bobs = new Map(p.bobs.map((b) => [b.id, b]));
         this._matrix = this.createMatrixLayer(
             'tiles',
             first.cols,
@@ -296,11 +350,12 @@ export class ProjectGame extends FairyEngine {
             for (let x = 0; x < level.cols; x++) {
                 const bobId = this._tiles[y * level.cols + x];
                 if (bobId !== EMPTY_TILE) {
-                    this._matrix.setTileGfx(x, y, this._tileOf.get(bobId) ?? 0);
-                    this._matrix.setTileCode(x, y, this._collisionOf.get(bobId) ?? TILE_AIR);
+                    this._placeBob(x, y, bobId);
                 }
             }
         }
+        this._sky.setImage(this._images.get(`sky:${level.id}`)!);
+        this._sky.setParallax(level.sky.parallax, 0);
         this._cam.setWorldSize(level.cols * ASSET_SIZE, level.rows * ASSET_SIZE);
         this._cam.moveTo(0, level.rows * ASSET_SIZE);
         for (const handler of this._levelStartHandlers) {
@@ -339,6 +394,24 @@ export class ProjectGame extends FairyEngine {
                 }
             }
         }
+        for (const { tag, marker, handler } of this._markerHandlers) {
+            for (const m of this.level.markers) {
+                if (m.tag.trim() !== marker) continue;
+                for (const s of this._sprites) {
+                    if (s.alive && s.tag === tag && s.overlapsCell(m.col, m.row)) {
+                        this._start(handler, [s], `m${m.id}`);
+                    }
+                }
+            }
+        }
+        for (const s of this._sprites) {
+            if (s.alive && !s.animationEndFired && s.fairy.oAnimation?.bOver) {
+                s.animationEndFired = true;
+                for (const { tag, handler } of this._animationEndHandlers) {
+                    if (s.tag === tag) this._start(handler, [s]);
+                }
+            }
+        }
 
         this._scheduler.tick();
         this._sprites = this._sprites.filter((s) => s.alive);
@@ -352,13 +425,52 @@ export class ProjectGame extends FairyEngine {
             const pos = this._follow.fairy.oFlight.vPosition;
             this._cam.follow({ x: pos.x + ASSET_SIZE / 2, y: pos.y + ASSET_SIZE / 2 });
         }
+        this._hud.update(this.hudContext());
         return null;
+    }
+
+    /**
+     * Values available to interface templates: `niveau` (level name), `temps` (whole
+     * seconds since the start), then every block variable (they win over these two).
+     */
+    hudContext(): Record<string, unknown> {
+        const context: Record<string, unknown> = {
+            niveau: this.level.name,
+            temps: Math.floor(this._tick / this.getTickRate()),
+        };
+        let vars: Record<string, unknown> = {};
+        try {
+            vars = this._vars();
+        } catch (e) {
+            // Never stop the game because of the interface: report once, then show no values.
+            this._vars = () => ({});
+            this.onScriptError?.(`Interface : variables illisibles (${(e as Error).message}).`);
+        }
+        for (const [name, value] of Object.entries(vars)) {
+            context[name] =
+                value instanceof Register
+                    ? Object.fromEntries([...value.values].map(([k, v]) => [k, displayValue(v)]))
+                    : value instanceof SpriteInstance
+                      ? value.name
+                      : (displayValue(value) ?? '');
+        }
+        return context;
     }
 
     override destroy(): void {
         this._scheduler.stopAll();
         this._stopSounds(() => true);
         super.destroy();
+    }
+
+    /** Put a BOB in a cell (graphics, collision, animation). */
+    private _placeBob(x: number, y: number, bobId: number): void {
+        const bob = this._bobs.get(bobId);
+        const tile = this._tileOf.get(bobId) ?? 0;
+        this._matrix.setTile(x, y, tile, this._collisionOf.get(bobId) ?? TILE_AIR);
+        if (bob && bob.frames.length > 1) {
+            this._matrix.setTileAnimation(x, y, tile, bob.frames.length, bob.frameDuration);
+        }
     }
 
     /** Start « quand le son … est terminé » for every sound that ended. */
@@ -389,18 +501,41 @@ export class ProjectGame extends FairyEngine {
      * Start a handler, unless its previous run (for the same sprites, for sprite events)
      * is still going.
      */
-    private _start(handler: Handler, sprites: SpriteInstance[] = []): void {
+    private _start(handler: Handler, sprites: SpriteInstance[] = [], extraKey = ''): void {
         let runs = this._threads.get(handler);
         if (!runs) {
             runs = new Map();
             this._threads.set(handler, runs);
         }
-        const key = sprites.map((s) => s.id).join(':');
+        const key = sprites.map((s) => s.id).join(':') + extraKey;
         const previous = runs.get(key);
         if (previous && !previous.done) {
             return;
         }
         runs.set(key, this._scheduler.spawn(handler.label, handler.run(...sprites)));
+    }
+
+    /** Check that an interface text exists. */
+    private _hudText(id: number): number {
+        if (!this._project.hud.some((t) => t.id === id)) {
+            throw new ScriptError("Choisis un texte de l'onglet Interface dans la liste.");
+        }
+        return id;
+    }
+
+    /** The n-th (1-based) marker with this tag in the current level. */
+    private _marker(tag: string, n: unknown): Marker {
+        const index = num(n, 'marqueur');
+        const markers = this.level.markers.filter((m) => m.tag.trim() === tag);
+        const marker = markers[index - 1];
+        if (!marker) {
+            throw new ScriptError(
+                markers.length === 0
+                    ? `Le niveau « ${this.level.name} » n'a pas de marqueur « ${tag} ».`
+                    : `Le niveau « ${this.level.name} » n'a que ${markers.length} marqueur(s) « ${tag} » (demandé : n° ${index}).`
+            );
+        }
+        return marker;
     }
 
     /** Check that `(col, row)` are whole numbers inside the current level. */
@@ -421,14 +556,23 @@ export class ProjectGame extends FairyEngine {
         }
         const fairy = this.createFairy(this._spriteLayer, `sprite:${asset.id}`);
         fairy.setSize(ASSET_SIZE, ASSET_SIZE);
+        // Animation 0: the first image, still. Then one per sprite animation.
         const still = new FairyAnimation();
         still.setFrameRange(0, 1);
         still.setNoLoop();
         fairy.aAnimations.push(still);
-        fairy.playAnimation(0);
+        const ranges = this._sheets.get(asset.id) ?? [];
+        asset.animations.forEach((a, i) => {
+            const anim = new FairyAnimation();
+            anim.setFrameRange(ranges[i].start, ranges[i].count);
+            anim.setLoop(LoopType.Forward, 1, a.frameDuration, a.loop ? 0 : 1);
+            fairy.aAnimations.push(anim);
+        });
         fairy.oFlight.vPosition.set(x, y);
 
         const instance = new SpriteInstance(asset, fairy);
+        instance.animation = asset.animations.length > 0 ? 1 : 0;
+        fairy.playAnimation(instance.animation);
         fairy.oObservatory.attach(
             'move',
             new Observer<Fairy, FairyFlight>(this, (_sender, flight) => {
@@ -467,6 +611,16 @@ export class ProjectGame extends FairyEngine {
             },
             onSoundEnd: (soundId, label, run) => {
                 this._soundEndHandlers.push({ soundId, handler: { label, run } });
+            },
+            onAnimationEnd: (tag, label, run) => {
+                this._animationEndHandlers.push({ tag: tag.trim(), handler: { label, run } });
+            },
+            onSpriteMarker: (tag, marker, label, run) => {
+                this._markerHandlers.push({
+                    tag: tag.trim(),
+                    marker: marker.trim(),
+                    handler: { label, run },
+                });
             },
             noEventSprite: (block) => {
                 throw new ScriptError(
@@ -559,12 +713,7 @@ export class ProjectGame extends FairyEngine {
                 }
                 const [x, y] = cell;
                 this._tiles[y * this.level.cols + x] = bobId;
-                this._matrix.setTile(
-                    x,
-                    y,
-                    this._tileOf.get(bobId) ?? 0,
-                    this._collisionOf.get(bobId) ?? TILE_AIR
-                );
+                this._placeBob(x, y, bobId);
             },
             tileIs: (col, row, bobId) => {
                 const cell = this._cell(col, row, 'la case est');
@@ -599,6 +748,43 @@ export class ProjectGame extends FairyEngine {
             },
             stopSound: (soundId) => this._stopSounds((id) => id === soundId),
             stopAllSounds: () => this._stopSounds(() => true),
+
+            setAnimation: (sprite, name) => {
+                const s = asSprite(sprite, "changer l'animation");
+                const index = s.asset.animations.findIndex((a) => a.name === name);
+                if (index < 0) {
+                    throw new ScriptError(
+                        `« changer l'animation » : le sprite « ${s.name} » n'a pas d'animation « ${name} ».`
+                    );
+                }
+                const fairyIndex = index + 1;
+                const playing = s.animation === fairyIndex && !s.fairy.oAnimation?.bOver;
+                if (s.alive && !playing) {
+                    s.animation = fairyIndex;
+                    s.animationEndFired = false;
+                    s.fairy.playAnimation(fairyIndex);
+                }
+            },
+            face: (sprite, side) => {
+                const s = asSprite(sprite, 'tourner');
+                s.facingLeft = side === 'left';
+                const image = this._images.get(
+                    `sprite:${s.asset.id}${s.facingLeft ? ':left' : ''}`
+                );
+                if (image) s.fairy.setImage(image);
+            },
+            markerPos: (tag, axis, n) => {
+                const marker = this._marker(tag, n);
+                return (axis === 'x' ? marker.col : marker.row) * ASSET_SIZE;
+            },
+            markerCount: (tag) => this.level.markers.filter((m) => m.tag.trim() === tag).length,
+
+            vars: (getter) => {
+                this._vars = getter;
+            },
+            hudShow: (textId, visible) => this._hud.setVisible(this._hudText(textId), visible),
+            hudSet: (textId, template) =>
+                this._hud.setTemplate(this._hudText(textId), String(displayValue(template) ?? '')),
         };
     }
 }
