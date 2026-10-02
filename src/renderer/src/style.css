@@ -1,0 +1,45 @@
+:root {
+    --bg: #1e1f2b;
+    --panel: #282a3a;
+    --panel-2: #33364a;
+    --border: #44485f;
+    --text: #e8e8f0;
+    --text-dim: #9a9cb5;
+    --accent: #ffb347;
+    --accent-2: #5ec2ff;
+    --danger: #ff6b6b;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+button {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}

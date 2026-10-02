@@ -9,7 +9,17 @@ Les jeux seront des jeux 2D au look retro (simple à construire). avec des sprit
 Les jeux sont orchestrés par un timer qu'on va cadencer à 30 ou 20 fps
 
 
-Section Blockly :
+Pour l'instant seule la bibliothèque Fairy est présent, il y a tout a faire depuis l'échafaudage.
+
+
+Onglet système
+------------------
+
+Enregistrement / cahrgement de fichier.
+
+
+
+Onglet CODE :
 -----------------
 On programme le jeu grace à la librairie de pogrammation visuelle par block : Blockly
 Tres ressemblant aux site "scratch" de programmation par bloc actuels
@@ -50,43 +60,45 @@ Prévoir des évènements
 	"Son {} terminé"
 	...
 
-Section Assets :
+Onglets Assets :
 ----------------
-un editeur de BOB (élément de décors)
+un onglet editeur de BOB (élément de décors)
 	- 32x32 pixels (objet d'arrière plan, décor, élément de niveau) 
 	- avec une palette de 256 couleur
 	- propriété solide / pas solide qui empèche les sprite de traverser le block.
 	- peut être animé (plusieur frame definissable)
 	- Proposer un générateur de texture simple pour les tempalte : "rocher", "brique", "metal", "terre", "terre+herbe", "bois", "lave", "eau", "buisson", "cailloux", "tronc d'arbre", ....
-un editeur de sprites 
+un onglet editeur de sprites 
 	- 32x32 pixels 
 	- avec une palette de 256 couleur dont une transparente
 	- un sprite possède un tag permettant de réagir aux évènements de manière générique 
 	- possède plusieurs animations, avec un tag pour chacune
 	- chaque animation possède une longueur, vitesse, loop etc... prévu par la librarie Fairy
-un editeur de niveau 
+un onglet editeur de niveau 
 	- on peut placer des BOB et des marqueurs (servent à être référencer dans le code), 
 	- les niveau peuvent avoir une taille dépassant l'écran de 640x480
-un éditeur de ciel
+un onglet éditeur de ciel
 	- une image qui bougera en paralaxe avec une possibilité de prégénérer ciel, montagnes, nuage, lune, étoiles, ou bien un environnement neutre mosaique
 	- pouvoir définir l'heure de la journée : matin, après midi, soir, nuit.
 		
-un editeur d'interface
+un onglet editeur d'interface
 	- Placer du texte fixe avec un minimum de templating {{}} (utiliser handlebars)
 	- Chaque texte a son style
 	- alignement simple (les 8 coins ou le centre)
 	- Le div dans lequel se trouve le canvas possède un layer html ou faciliter
-un editeur de son 
+un onlget editeur de son 
 	- utilisation library de type jsfxr
 	- simplification des paramètre pour des sons
 	- proposer des preset et un bouton de randomisation pour "power up", "jump", "explosion", "hit", "treasure" etc...
 	- chaque son a un tag 
 
-Section rendu de 640x480 pixel
+
+Panneau de droite : Canvas de rendu de 640x480 pixel
 	- un bouton démarrer, pour lancer le timer.
 	- un bouton stop, pour arreter le timer et réinitialiser le jeu
 	- un bouton aggrandir, pour mieux voir le jeu (grossissement CSS)
 
-Section systeme
-	- sauvegarder / restorer code -> ecriture/lecture sur disque
+Onglet A propos
+---------------
 
+version du logiciel
