@@ -180,4 +180,15 @@ export function registerKarenGenerators(): void {
         const [call] = callReturn.call(this, block, g) as [string, Order];
         return `yield* ${call};\n`;
     };
+
+    // ── Sound ─────────────────────────────────────────────────────────────────
+    const sound = (b: Blockly.Block) => Number(b.getFieldValue('SOUND'));
+    gen.forBlock['karen_sound_play'] = (b) => `${API}.playSound(${sound(b)});\n`;
+    gen.forBlock['karen_sound_play_wait'] = (b) => `yield ${API}.playSound(${sound(b)});\n`;
+    gen.forBlock['karen_sound_stop'] = (b) => `${API}.stopSound(${sound(b)});\n`;
+    gen.forBlock['karen_sound_stop_all'] = () => `${API}.stopAllSounds();\n`;
+    gen.forBlock['karen_on_sound_end'] = (b, g) => {
+        const label = `quand le son ${b.getField('SOUND')?.getText() ?? ''} est terminé`;
+        return hat(b, g, `onSoundEnd(${sound(b)}, `, label);
+    };
 }

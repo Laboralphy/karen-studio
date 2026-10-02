@@ -1,6 +1,7 @@
 import { createLevel } from './level';
 import { blankPixels } from './pixels';
 import { defaultPalette } from './palette';
+import { normalizeSoundParams } from './sound';
 import { ASSET_SIZE, type KarenProject, type Level } from './model';
 
 /** Palette indices (default palette, DB32 part) used by the starter art. */
@@ -209,7 +210,12 @@ function starterCode(): object {
                                         inputs: { SPRITE: player },
                                     },
                                 },
-                                DO0: { block: setProp('vy', -14) },
+                                DO0: {
+                                    block: setProp('vy', -14, {
+                                        type: 'karen_sound_play',
+                                        fields: { SOUND: '1' },
+                                    }),
+                                },
                             },
                         },
                     },
@@ -233,6 +239,35 @@ export function newProject(): KarenProject {
             { id: 4, name: 'Plateforme', collision: 'platform', pixels: platform() },
         ],
         sprites: [{ id: 1, name: 'Héroïne', tag: 'joueur', pixels: heroine() }],
+        sounds: [
+            {
+                id: 1,
+                name: 'saut',
+                params: normalizeSoundParams({
+                    wave_type: 0,
+                    p_base_freq: 0.4,
+                    p_freq_ramp: 0.2,
+                    p_env_sustain: 0.2,
+                    p_env_decay: 0.2,
+                    p_duty: 0.3,
+                    sound_vol: 0.4,
+                }),
+            },
+            {
+                id: 2,
+                name: 'trésor',
+                params: normalizeSoundParams({
+                    wave_type: 1,
+                    p_base_freq: 0.6,
+                    p_env_sustain: 0.05,
+                    p_env_decay: 0.3,
+                    p_env_punch: 0.45,
+                    p_arp_speed: 0.6,
+                    p_arp_mod: 0.35,
+                    sound_vol: 0.4,
+                }),
+            },
+        ],
         levels: [starterLevel()],
         code: starterCode(),
     };

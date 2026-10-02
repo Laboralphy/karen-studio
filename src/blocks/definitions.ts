@@ -3,9 +3,9 @@ import { KEY_OPTIONS } from './keys';
 import type { KarenProject } from '../project/model';
 
 /** The parts of a project the dynamic dropdowns (sprites, tags, BOB, levels) read. */
-export type BlocksProject = Pick<KarenProject, 'sprites' | 'bobs' | 'levels'>;
+export type BlocksProject = Pick<KarenProject, 'sprites' | 'bobs' | 'levels' | 'sounds'>;
 
-let currentProject: () => BlocksProject = () => ({ sprites: [], bobs: [], levels: [] });
+let currentProject: () => BlocksProject = () => ({ sprites: [], bobs: [], levels: [], sounds: [] });
 
 /**
  * Tell the blocks where to read the current project from (for their dropdown menus).
@@ -42,6 +42,11 @@ export const bobOptions = (): Options => [
     ['(vide)', '0'],
     ...currentProject().bobs.map((b): [string, string] => [b.name, String(b.id)]),
 ];
+/** Sounds: [name, id]. */
+export const soundOptions = dynamic(
+    (p) => p.sounds.map((s) => [s.name, String(s.id)]),
+    '(aucun son)'
+);
 /** Levels: [name, id]. */
 export const levelOptions = dynamic(
     (p) => p.levels.map((l) => [l.name, String(l.id)]),
@@ -74,6 +79,7 @@ export const HAT_TYPES = new Set([
     'karen_on_key',
     'karen_on_sprite_tile',
     'karen_on_sprite_sprite',
+    'karen_on_sound_end',
 ]);
 /** Hats whose scripts receive « ce sprite » (and « l'autre sprite » for the second one). */
 export const SPRITE_EVENT_TYPES = new Set(['karen_on_sprite_tile', 'karen_on_sprite_sprite']);
@@ -91,6 +97,7 @@ export const COLORS = {
     lists: '#d65c3d',
     dicts: '#b5527a',
     level: '#8a6d3b',
+    sound: '#c94fd6',
 };
 
 let defined = false;
@@ -301,6 +308,15 @@ export function defineKarenBlocks(): void {
             colour: COLORS.operators,
             tooltip: 'Le plus petit (minimum) ou le plus grand (maximum) des deux nombres.',
         },
+        // ── Sound ─────────────────────────────────────────────────────────────
+        {
+            type: 'karen_sound_stop_all',
+            message0: 'arrêter tous les sons',
+            previousStatement: null,
+            nextStatement: null,
+            colour: COLORS.sound,
+            tooltip: 'Arrête tous les sons en train de jouer.',
+        },
         // ── Registers (Record<string, number>) ───────────────────────────────
         {
             type: 'karen_dict_create',
@@ -491,6 +507,56 @@ export function defineKarenBlocks(): void {
             this.setTooltip(
                 'Change de niveau à la fin du tick : tous les sprites disparaissent, ' +
                     'puis « quand le niveau commence » est exécuté. Les variables sont gardées.'
+            );
+        },
+    };
+
+    /** A statement block made of a label and the sound dropdown. */
+    const soundStatement = (type: string, before: string, after: string, tooltip: string) => {
+        Blockly.Blocks[type] = {
+            init(this: Blockly.Block) {
+                const input = this.appendDummyInput()
+                    .appendField(before)
+                    .appendField(new Blockly.FieldDropdown(soundOptions), 'SOUND');
+                if (after) {
+                    input.appendField(after);
+                }
+                this.setPreviousStatement(true);
+                this.setNextStatement(true);
+                this.setColour(COLORS.sound);
+                this.setTooltip(tooltip);
+            },
+        };
+    };
+    soundStatement(
+        'karen_sound_play',
+        'jouer le son',
+        '',
+        'Joue le son ; le script continue tout de suite.'
+    );
+    soundStatement(
+        'karen_sound_play_wait',
+        'jouer le son',
+        "jusqu'au bout",
+        'Joue le son et attend qu’il soit fini avant de continuer.'
+    );
+    soundStatement(
+        'karen_sound_stop',
+        'arrêter le son',
+        '',
+        'Arrête ce son s’il est en train de jouer.'
+    );
+
+    Blockly.Blocks['karen_on_sound_end'] = {
+        init(this: Blockly.Block) {
+            this.appendDummyInput()
+                .appendField('quand le son')
+                .appendField(new Blockly.FieldDropdown(soundOptions), 'SOUND')
+                .appendField('est terminé');
+            this.setNextStatement(true);
+            this.setColour(COLORS.events);
+            this.setTooltip(
+                'Exécute les blocs en dessous quand ce son finit de jouer (pas quand il est arrêté).'
             );
         },
     };

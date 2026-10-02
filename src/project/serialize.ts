@@ -1,4 +1,5 @@
 import { decodePixels, encodePixels } from './pixels';
+import { normalizeSoundParams } from './sound';
 import {
     ASSET_PIXELS,
     LEVEL_MAX_COLS,
@@ -8,13 +9,14 @@ import {
     type BobCollision,
     type KarenProject,
     type Level,
+    type SoundAsset,
     type SpriteAsset,
 } from './model';
 
 /** Identifies a Karen Studio file. */
 export const FILE_FORMAT = 'karen-studio';
 /** Current file format version. Bump it and add a migration when the format changes. */
-export const FILE_VERSION = 1;
+export const FILE_VERSION = 2;
 /** File extension, without the dot. */
 export const FILE_EXTENSION = 'karen';
 
@@ -45,7 +47,10 @@ interface FileProject extends Omit<KarenProject, 'bobs' | 'sprites'> {
  * Migrations from version N to N+1, indexed by N.
  * Each one receives the raw parsed JSON of version N and returns version N+1.
  */
-const MIGRATIONS: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {};
+const MIGRATIONS: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {
+    // v2: sound effects.
+    1: (data) => ({ ...data, version: 2, sounds: [] }),
+};
 
 /** Serialise a project to the `.karen` JSON text. */
 export function saveProject(project: KarenProject): string {
@@ -57,6 +62,7 @@ export function saveProject(project: KarenProject): string {
         palette: [...project.palette],
         bobs: project.bobs.map((b) => ({ ...b, pixels: encodePixels(b.pixels) })),
         sprites: project.sprites.map((s) => ({ ...s, pixels: encodePixels(s.pixels) })),
+        sounds: project.sounds.map((s) => ({ ...s, params: { ...s.params } })),
         levels: project.levels.map((l) => ({ ...l, tiles: [...l.tiles] })),
         code: project.code,
     };
@@ -137,8 +143,13 @@ function validate(f: FileProject): KarenProject {
     const tickRate = f.settings.tickRate === 20 ? 20 : 30;
     const backgroundColor = checkString(f.settings.backgroundColor, 'couleur de fond');
 
-    if (!Array.isArray(f.bobs) || !Array.isArray(f.sprites) || !Array.isArray(f.levels)) {
-        fail('listes BOB / sprites / niveaux');
+    if (
+        !Array.isArray(f.bobs) ||
+        !Array.isArray(f.sprites) ||
+        !Array.isArray(f.sounds) ||
+        !Array.isArray(f.levels)
+    ) {
+        fail('listes BOB / sprites / sons / niveaux');
     }
     const bobs: Bob[] = f.bobs.map((b, i) => {
         if (!COLLISIONS.includes(b.collision)) {
@@ -157,6 +168,16 @@ function validate(f: FileProject): KarenProject {
         tag: checkString(s.tag, `tag du sprite ${i + 1}`),
         pixels: decodePixels(checkString(s.pixels, `pixels du sprite ${i + 1}`), ASSET_PIXELS),
     }));
+    const sounds: SoundAsset[] = f.sounds.map((s, i) => {
+        if (!isObject(s.params)) {
+            fail(`réglages du son ${i + 1}`);
+        }
+        return {
+            id: checkId(s.id, `son ${i + 1}`),
+            name: checkString(s.name, `nom du son ${i + 1}`),
+            params: normalizeSoundParams(s.params),
+        };
+    });
     const bobIds = new Set(bobs.map((b) => b.id));
     const levels: Level[] = f.levels.map((l, i) => {
         const cols = l.cols;
@@ -192,6 +213,7 @@ function validate(f: FileProject): KarenProject {
         palette: [...palette],
         bobs,
         sprites,
+        sounds,
         levels,
         code: isObject(f.code) ? f.code : null,
     };

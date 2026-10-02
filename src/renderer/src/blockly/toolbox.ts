@@ -18,6 +18,7 @@ export const TOOLBOX = {
                 block('karen_on_level_start'),
                 block('karen_on_tick'),
                 block('karen_on_key'),
+                block('karen_on_sound_end'),
                 label('Événements de sprites'),
                 block('karen_on_sprite_tile'),
                 block('karen_on_sprite_sprite'),
@@ -111,6 +112,17 @@ export const TOOLBOX = {
                 block('karen_level_tile_is', { inputs: { X: num(0), Y: num(0) } }),
                 block('karen_level_cell_of'),
                 block('karen_level_goto'),
+            ],
+        },
+        {
+            kind: 'category',
+            name: 'Son',
+            colour: COLORS.sound,
+            contents: [
+                block('karen_sound_play'),
+                block('karen_sound_play_wait'),
+                block('karen_sound_stop'),
+                block('karen_sound_stop_all'),
             ],
         },
         {

@@ -24,7 +24,7 @@ export function initKarenBlockly(): void {
  * registers the event handlers (generator functions) and declares the variables.
  */
 export function compileProject(
-    project: Pick<KarenProject, 'code' | 'sprites' | 'bobs' | 'levels'>
+    project: Pick<KarenProject, 'code' | 'sprites' | 'bobs' | 'levels' | 'sounds'>
 ): string {
     initKarenBlockly();
     if (!project.code) {

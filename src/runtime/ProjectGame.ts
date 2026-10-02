@@ -23,6 +23,7 @@ import {
 } from '../project/model';
 import { assetCanvas, buildTileset } from '../project/render';
 import { Scheduler, type ScriptCoroutine, type ScriptThread } from './Scheduler';
+import { SoundPlayer, type SoundHandle } from './SoundPlayer';
 
 const SCREEN_W = 640;
 const SCREEN_H = 480;
@@ -114,6 +115,7 @@ export interface ScriptApi {
     onKey(key: number, state: 'down' | 'up', label: string, run: ScriptBody): void;
     onSpriteTile(tag: string, label: string, run: ScriptBody): void;
     onSpriteSprite(tag: string, other: string, label: string, run: ScriptBody): void;
+    onSoundEnd(soundId: number, label: string, run: ScriptBody): void;
     /** « ce sprite » used outside a sprite event: always throws. */
     noEventSprite(block: string): never;
     keyDown(key: number): boolean;
@@ -141,6 +143,10 @@ export interface ScriptApi {
     cellOf(sprite: unknown, axis: 'col' | 'row'): number;
     /** Switch level at the end of the tick. */
     goToLevel(levelId: number): void;
+    /** Play a sound; returns its length in ticks (for « jouer le son jusqu'au bout »). */
+    playSound(soundId: number): number;
+    stopSound(soundId: number): void;
+    stopAllSounds(): void;
 }
 
 /** Labels of the sprite properties, for error messages. */
@@ -179,6 +185,11 @@ export class ProjectGame extends FairyEngine {
     private readonly _keyHandlers: { key: number; state: 'down' | 'up'; handler: Handler }[] = [];
     private readonly _tileHandlers: { tag: string; handler: Handler }[] = [];
     private readonly _pairHandlers: { tag: string; other: string; handler: Handler }[] = [];
+    private readonly _soundEndHandlers: { soundId: number; handler: Handler }[] = [];
+    /** Sounds being played, with the tick at which they end. */
+    private _playing: { soundId: number; endTick: number; handle: SoundHandle | null }[] = [];
+    /** Number of running ticks so far. */
+    private _tick = 0;
     /**
      * Last thread started by each handler (per sprite or sprite pair for sprite events),
      * to avoid piling up unfinished runs.
@@ -194,7 +205,8 @@ export class ProjectGame extends FairyEngine {
      */
     constructor(
         private readonly _project: KarenProject,
-        private readonly _code: string
+        private readonly _code: string,
+        private readonly _audio: SoundPlayer = new SoundPlayer(null)
     ) {
         super();
         this._scheduler.onError = (thread, error) => {
@@ -232,6 +244,7 @@ export class ProjectGame extends FairyEngine {
         for (const sprite of p.sprites) {
             this.addImage(`sprite:${sprite.id}`, assetCanvas(sprite.pixels, p.palette));
         }
+        this._audio.prepare(p.sounds);
     }
 
     protected override stateGameInitializing(): void {
@@ -296,6 +309,8 @@ export class ProjectGame extends FairyEngine {
     }
 
     protected override stateGameRunning(): null {
+        this._tick++;
+        this._dispatchSoundEnds();
         for (const { key, state, handler } of this._keyHandlers) {
             const fired =
                 state === 'down' ? this._input.isKeyPressed(key) : this._input.isKeyReleased(key);
@@ -342,7 +357,32 @@ export class ProjectGame extends FairyEngine {
 
     override destroy(): void {
         this._scheduler.stopAll();
+        this._stopSounds(() => true);
         super.destroy();
+    }
+
+    /** Start « quand le son … est terminé » for every sound that ended. */
+    private _dispatchSoundEnds(): void {
+        const ended = this._playing.filter((p) => p.endTick <= this._tick);
+        if (ended.length === 0) return;
+        this._playing = this._playing.filter((p) => p.endTick > this._tick);
+        for (const { soundId } of ended) {
+            for (const h of this._soundEndHandlers) {
+                if (h.soundId === soundId) {
+                    this._start(h.handler);
+                }
+            }
+        }
+    }
+
+    /** Stop (without « terminé » event) the sounds matching `which`. */
+    private _stopSounds(which: (soundId: number) => boolean): void {
+        for (const p of this._playing) {
+            if (which(p.soundId)) {
+                p.handle?.stop();
+            }
+        }
+        this._playing = this._playing.filter((p) => !which(p.soundId));
     }
 
     /**
@@ -424,6 +464,9 @@ export class ProjectGame extends FairyEngine {
                     other: other.trim(),
                     handler: { label, run },
                 });
+            },
+            onSoundEnd: (soundId, label, run) => {
+                this._soundEndHandlers.push({ soundId, handler: { label, run } });
             },
             noEventSprite: (block) => {
                 throw new ScriptError(
@@ -538,6 +581,24 @@ export class ProjectGame extends FairyEngine {
                 }
                 this._pendingLevel = index;
             },
+
+            playSound: (soundId) => {
+                if (!this._audio.has(soundId)) {
+                    throw new ScriptError('« jouer le son » : choisis un son dans la liste.');
+                }
+                const ticks = Math.max(
+                    1,
+                    Math.ceil(this._audio.duration(soundId) * this.getTickRate())
+                );
+                this._playing.push({
+                    soundId,
+                    endTick: this._tick + ticks,
+                    handle: this._audio.play(soundId),
+                });
+                return ticks;
+            },
+            stopSound: (soundId) => this._stopSounds((id) => id === soundId),
+            stopAllSounds: () => this._stopSounds(() => true),
         };
     }
 }

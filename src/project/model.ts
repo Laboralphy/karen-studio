@@ -38,6 +38,16 @@ export interface SpriteAsset {
     pixels: number[];
 }
 
+/** Sound effect, synthesised by jsfxr from its parameters. */
+export interface SoundAsset {
+    /** Stable identifier (> 0), referenced by code blocks. */
+    id: number;
+    /** Name shown in the « jouer le son » blocks. */
+    name: string;
+    /** jsfxr parameters (see `sound.ts`). */
+    params: Record<string, number>;
+}
+
 export interface Level {
     /** Stable identifier (> 0). */
     id: number;
@@ -62,6 +72,7 @@ export interface KarenProject {
     palette: string[];
     bobs: Bob[];
     sprites: SpriteAsset[];
+    sounds: SoundAsset[];
     /** The first level is the one the game starts on. */
     levels: Level[];
     /** Blockly workspace (`Blockly.serialization.workspaces.save`), or null when empty. */

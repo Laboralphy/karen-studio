@@ -6,6 +6,7 @@ import CodeTab from './tabs/CodeTab.vue';
 import BobTab from './tabs/BobTab.vue';
 import SpritesTab from './tabs/SpritesTab.vue';
 import LevelTab from './tabs/LevelTab.vue';
+import SoundTab from './tabs/SoundTab.vue';
 
 export interface TabDef {
     id: string;
@@ -34,11 +35,6 @@ export const TABS: TabDef[] = [
         component: TabPlaceholder,
         description: 'Placer les textes affichés par-dessus le jeu.',
     },
-    {
-        id: 'sound',
-        label: 'Son',
-        component: TabPlaceholder,
-        description: 'Créer des effets sonores rétro.',
-    },
+    { id: 'sound', label: 'Son', component: SoundTab },
     { id: 'about', label: 'À propos', component: AboutTab },
 ];

@@ -1,6 +1,17 @@
 import { compileProject } from '../blocks/compile';
 import type { KarenProject } from '../project/model';
 import { ProjectGame } from './ProjectGame';
+import { SoundPlayer } from './SoundPlayer';
+
+let sharedContext: AudioContext | null | undefined;
+
+/** One audio context for the whole application (null when WebAudio is unavailable). */
+function audioContext(): AudioContext | null {
+    if (sharedContext === undefined) {
+        sharedContext = typeof AudioContext === 'undefined' ? null : new AudioContext();
+    }
+    return sharedContext;
+}
 
 /**
  * Runs a project in the editor's preview canvas.
@@ -40,7 +51,9 @@ export class GameRuntime {
             this.onError?.(`Les blocs n'ont pas pu être compilés : ${(e as Error).message}`);
             return false;
         }
-        const game = new ProjectGame(snapshot, code);
+        const context = audioContext();
+        void context?.resume();
+        const game = new ProjectGame(snapshot, code, new SoundPlayer(context));
         game.setCanvas(canvas);
         game.setInputTarget(inputTarget);
         game.onScriptError = (message) => this.onScriptError?.(message);

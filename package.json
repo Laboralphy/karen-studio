@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "blockly": "^13.3.0",
+    "jsfxr": "^1.4.1",
     "vue": "^3.5.43"
   },
   "devDependencies": {

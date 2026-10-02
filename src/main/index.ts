@@ -18,6 +18,8 @@ function createWindow(): void {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
+            // The game plays sounds without waiting for a click in the page.
+            autoplayPolicy: 'no-user-gesture-required',
         },
     });
 

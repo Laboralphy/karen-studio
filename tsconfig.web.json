@@ -4,7 +4,11 @@
         "target": "ES2022",
         "module": "ESNext",
         "moduleResolution": "bundler",
-        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "lib": [
+            "ES2022",
+            "DOM",
+            "DOM.Iterable"
+        ],
         "strict": true,
         "isolatedModules": true,
         "skipLibCheck": true,
@@ -12,15 +16,28 @@
         "jsx": "preserve",
         "baseUrl": ".",
         "paths": {
-            "@fairy/*": ["src/engine/*"],
-            "@fairy-core/*": ["src/core/*"],
-            "@runtime/*": ["src/runtime/*"],
-            "@renderer/*": ["src/renderer/src/*"],
-            "@project/*": ["src/project/*"],
-            "@blocks/*": ["src/blocks/*"]
+            "@fairy/*": [
+                "src/engine/*"
+            ],
+            "@fairy-core/*": [
+                "src/core/*"
+            ],
+            "@runtime/*": [
+                "src/runtime/*"
+            ],
+            "@renderer/*": [
+                "src/renderer/src/*"
+            ],
+            "@project/*": [
+                "src/project/*"
+            ],
+            "@blocks/*": [
+                "src/blocks/*"
+            ]
         }
     },
     "include": [
+        "src/types/**/*",
         "src/renderer/src/**/*",
         "src/renderer/src/**/*.vue",
         "src/preload/*.d.ts",

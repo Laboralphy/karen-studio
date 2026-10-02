@@ -13,6 +13,7 @@ function workspace(blocks: object[], variables: { name: string; id: string }[] =
         sprites: [],
         bobs: [],
         levels: [],
+        sounds: [],
     };
 }
 
@@ -43,7 +44,9 @@ describe('compilation des blocs', () => {
     });
 
     it('un projet sans code ne produit rien', () => {
-        expect(compileProject({ code: null, sprites: [], bobs: [], levels: [] })).toBe('');
+        expect(compileProject({ code: null, sprites: [], bobs: [], levels: [], sounds: [] })).toBe(
+            ''
+        );
     });
 
     it('ignore les blocs qui ne sont pas sous un événement', () => {
@@ -153,6 +156,7 @@ describe('compilation des blocs (J3)', () => {
             sprites: [],
             bobs: [],
             levels: [],
+            sounds: [],
         };
         const code = compileProject(project);
         expect(code).toContain('function* double(n)');
@@ -184,6 +188,7 @@ describe('compilation des blocs (J3)', () => {
             sprites: [],
             bobs: [],
             levels: [],
+            sounds: [],
         });
         expect(code).toContain('__k.noEventSprite("ce sprite")');
     });
@@ -206,6 +211,7 @@ describe('compilation des blocs (J3)', () => {
             sprites,
             bobs: [],
             levels: [],
+            sounds: [],
         });
         expect(code).toContain(
             '__k.onSpriteSprite("joueur", "piece", "quand un sprite joueur touche un sprite piece", function* (__self, __other)'
