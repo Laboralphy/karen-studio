@@ -1,5 +1,5 @@
 import { Fairy } from './Fairy.js';
-import { IFairyLayer } from './IFairyLayer';
+import type { IFairyLayer } from './IFairyLayer.js';
 
 /**
  * Layer that owns and manages a collection of sprites.
@@ -18,6 +18,9 @@ export class Fairies implements IFairyLayer {
     private _yMax = Infinity;
     /** Scale factor applied to render positions of all fairies in this layer. */
     private _renderScale = 1;
+    /** Camera position (world coordinate of the screen's top-left corner). */
+    private _viewX = 0;
+    private _viewY = 0;
 
     /** Set the bottom boundary: any fairy whose Y position exceeds this is marked dead. */
     setYMax(yMax: number): void {
@@ -66,27 +69,44 @@ export class Fairies implements IFairyLayer {
         }
     }
 
-    /** Draw all fairies in insertion order. */
+    /** Camera hook: fairies are drawn shifted by `(-x, -y)`. */
+    setView(x: number, y: number): void {
+        this._viewX = x;
+        this._viewY = y;
+    }
+
+    /** Return the live fairies of this layer (do not modify the array). */
+    getFairies(): readonly Fairy[] {
+        return this._fairies;
+    }
+
+    /** Draw all fairies in insertion order, offset by the camera position. */
     render(): void {
+        const ctx = this._ctx;
+        const shifted = ctx !== null && (this._viewX !== 0 || this._viewY !== 0);
+        if (shifted) {
+            ctx.save();
+            // Same rounding as FairyMatrix.lookAt so sprites never jitter against tiles.
+            ctx.translate(Math.floor(-this._viewX), Math.floor(-this._viewY));
+        }
         for (const fairy of this._fairies) {
             fairy.render();
+        }
+        if (shifted) {
+            ctx.restore();
         }
     }
 
     /**
-     * Sweep the fairy list from the end, removing dead entries using swap-with-last
-     * for O(1) removal.  Calls `free()` on each removed fairy to unregister it from
-     * the collider.
+     * Sweep the fairy list from the end, removing dead entries with `splice` so the
+     * survivors keep their order (which is also their rendering order).
+     * Calls `free()` on each removed fairy to unregister it from the collider.
      */
     private _removeDeadFairies(): void {
         for (let i = this._fairies.length - 1; i >= 0; i--) {
             if (this._fairies[i].bDead) {
                 this._fairies[i].free();
-                // swap-with-last for O(1) removal
-                const last = this._fairies.pop()!;
-                if (i < this._fairies.length) {
-                    this._fairies[i] = last;
-                }
+                this._fairies.splice(i, 1);
             }
         }
     }

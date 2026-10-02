@@ -6,7 +6,10 @@ import { FairyMatrix } from './FairyMatrix.js';
 import { FairyLayer } from './FairyLayer.js';
 import { Fairies } from './Fairies.js';
 import { Fairy } from './Fairy.js';
-import { IFairyLayer } from './IFairyLayer';
+import { FairyTicker } from './FairyTicker.js';
+import type { FairyCamera } from './FairyCamera.js';
+import type { FairyImage } from './FairyImage.js';
+import type { IFairyLayer } from './IFairyLayer.js';
 
 /**
  * Base engine class.  Subclasses override the four state hooks to implement a game.
@@ -15,11 +18,15 @@ import { IFairyLayer } from './IFairyLayer';
  * 1. `stateEngineInitializing` – one-shot synchronous setup; kicks off resource loading.
  * 2. `stateResourceLoading`    – polls `FairyImageLoader` until all assets are ready.
  * 3. `stateGameInitializing`   – one-shot; builds layers, creates sprites, loads level.
- * 4. `stateGameRunning`        – called every RAF frame; runs game logic then `_updateFrame`.
+ * 4. `stateGameRunning`        – called every tick; runs game logic then `proceed` on every layer.
  *
- * **Rendering:** `_updateFrame` calls `proceed` then `render` on every layer.
- * Rendering is throttled to every other tick (`_frame & 1`) to target ~30 fps
- * when the browser delivers 60 Hz animation frames.
+ * **Timing:** the logic runs at a fixed rate (`setTickRate`, 30 ticks/s by default)
+ * whatever the display refresh rate, driven by a `FairyTicker` fed from
+ * `requestAnimationFrame`. After the ticks due for an animation frame have run,
+ * every layer is rendered once.
+ *
+ * **Camera:** when a `FairyCamera` is attached (`setCamera`), its position is passed to
+ * every layer implementing `setView` just before rendering.
  */
 export class FairyEngine {
     /** Manages all loaded sprite-sheet images. */
@@ -39,12 +46,22 @@ export class FairyEngine {
     private _seq = new FairySequencer();
     /** `requestAnimationFrame` handle, or null when the loop is stopped. */
     private _rafId: number | null = null;
-    /** Monotonically increasing tick counter; used for 30fps render throttle. */
-    private _frame = 0;
+    /** Fixed-timestep clock converting elapsed time into logic ticks. */
+    private _ticker = new FairyTicker(30);
+    /** True when at least one tick ran since the last render. */
+    private _needsRender = false;
+    /** Optional camera whose position is forwarded to layers before rendering. */
+    private _camera: FairyCamera | null = null;
+    /** Element (or window) receiving keyboard events. */
+    private _inputTarget: HTMLElement | Window = window;
+
+    /** Called when the game loop stops because of an uncaught error. */
+    onError: ((error: unknown) => void) | null = null;
 
     /** Bound input handlers — stored so they can be removed by `destroy()`. */
-    private _onKeyDown = (e: KeyboardEvent) => this._input.setKeyState(e.keyCode || e.which, true);
-    private _onKeyUp = (e: KeyboardEvent) => this._input.setKeyState(e.keyCode || e.which, false);
+    private _onKeyDown = (e: Event) => this._handleKey(e as KeyboardEvent, true);
+    private _onKeyUp = (e: Event) => this._handleKey(e as KeyboardEvent, false);
+    private _onBlur = () => this._input.releaseAll();
     private _onMouseMove = (e: MouseEvent) => this._input.setMouseXY(e.clientX, e.clientY);
     private _onMouseDown = (e: MouseEvent) => {
         this._input.setMouseButton(e.button, true);
@@ -87,10 +104,13 @@ export class FairyEngine {
         return 'stateGameRunning';
     }
 
-    /** Run `stateGameRunning`, update all layers, then check for a state transition. */
+    /** Run `stateGameRunning`, advance all layers, then check for a state transition. */
     private _doGameRunning(): string | null {
         const next = this.stateGameRunning() ?? null;
-        this._updateFrame();
+        for (const layer of this._layers) {
+            layer.proceed();
+        }
+        this._needsRender = true;
         return next;
     }
 
@@ -130,6 +150,38 @@ export class FairyEngine {
     /** Return the canvas element. */
     getCanvas(): HTMLCanvasElement {
         return this._canvas!;
+    }
+
+    // ── Timing, camera, input target ─────────────────────────────────────────
+
+    /** Set the number of logic ticks per second (e.g. 20 or 30). */
+    setTickRate(fps: number): void {
+        this._ticker.setRate(fps);
+    }
+
+    /** Return the number of logic ticks per second. */
+    getTickRate(): number {
+        return this._ticker.getRate();
+    }
+
+    /** Attach (or detach with null) the camera used to scroll the layers. */
+    setCamera(camera: FairyCamera | null): void {
+        this._camera = camera;
+    }
+
+    /** Return the attached camera, or null. */
+    getCamera(): FairyCamera | null {
+        return this._camera;
+    }
+
+    /**
+     * Choose which element receives keyboard events (default: `window`).
+     * With an element (it needs a `tabindex`), keys only drive the game while it has
+     * focus, and keys that would scroll the page (arrows, space…) are swallowed.
+     * Call before `start()`.
+     */
+    setInputTarget(target: HTMLElement | Window): void {
+        this._inputTarget = target;
     }
 
     /** Throw if `setCanvas` has not been called yet. */
@@ -229,6 +281,11 @@ export class FairyEngine {
         return fairy;
     }
 
+    /** Register an image generated in memory (canvas, bitmap) under `id`. */
+    addImage(id: string, image: FairyImage): void {
+        this._images.add(id, image);
+    }
+
     /**
      * Begin loading a sprite-sheet image asynchronously.
      * @param src - URL of the image file.
@@ -243,11 +300,22 @@ export class FairyEngine {
     /** Start the `requestAnimationFrame` loop and bind input event listeners. */
     start(): void {
         this._bindInputEvents();
-        const loop = () => {
+        this._ticker.reset();
+        const loop = (now: number) => {
             try {
-                this._seq.tick();
+                const ticks = this._ticker.advance(now);
+                for (let i = 0; i < ticks; i++) {
+                    this._seq.tick();
+                    this._input.endTick();
+                }
+                if (this._needsRender) {
+                    this._renderFrame();
+                    this._needsRender = false;
+                }
             } catch (e) {
                 console.error(e);
+                this._rafId = null;
+                this.onError?.(e);
                 return; // stop on error
             }
             this._rafId = requestAnimationFrame(loop);
@@ -269,8 +337,9 @@ export class FairyEngine {
      */
     destroy(): void {
         this.stop();
-        window.removeEventListener('keydown', this._onKeyDown);
-        window.removeEventListener('keyup', this._onKeyUp);
+        this._inputTarget.removeEventListener('keydown', this._onKeyDown);
+        this._inputTarget.removeEventListener('keyup', this._onKeyUp);
+        this._inputTarget.removeEventListener('blur', this._onBlur);
         if (this._canvas) {
             this._canvas.removeEventListener('mousemove', this._onMouseMove);
             this._canvas.removeEventListener(
@@ -285,27 +354,40 @@ export class FairyEngine {
         this.clearLayers();
     }
 
-    /**
-     * Advance all layers by one tick and render every other tick (~30 fps on 60 Hz displays).
-     * Physics and animation advancement always run at full tick rate; the throttle
-     * only reduces canvas draw calls for compatibility with slower hardware.
-     */
-    private _updateFrame(): void {
-        this._frame++;
+    /** Clear the canvas and draw every layer, passing the camera position first. */
+    private _renderFrame(): void {
+        const ctx = this._ctx;
+        if (ctx) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        }
+        const cam = this._camera;
         for (const layer of this._layers) {
-            layer.proceed();
-            if (this._frame & 1) {
-                layer.render();
+            if (cam) {
+                layer.setView?.(cam.x, cam.y);
             }
+            layer.render();
         }
     }
 
     // ── Input handling ────────────────────────────────────────────────────────
 
-    /** Attach keyboard and mouse event listeners to the window and canvas. */
+    /** Keys that scroll the page by default: space, page up/down, end, home, arrows. */
+    private static readonly _SCROLL_KEYS = new Set([32, 33, 34, 35, 36, 37, 38, 39, 40]);
+
+    /** Record a key transition; swallow scrolling keys when bound to an element. */
+    private _handleKey(e: KeyboardEvent, down: boolean): void {
+        const key = e.keyCode || e.which;
+        if (this._inputTarget !== window && FairyEngine._SCROLL_KEYS.has(key)) {
+            e.preventDefault();
+        }
+        this._input.setKeyState(key, down);
+    }
+
+    /** Attach keyboard listeners to the input target and mouse listeners to the canvas. */
     private _bindInputEvents(): void {
-        window.addEventListener('keydown', this._onKeyDown);
-        window.addEventListener('keyup', this._onKeyUp);
+        this._inputTarget.addEventListener('keydown', this._onKeyDown);
+        this._inputTarget.addEventListener('keyup', this._onKeyUp);
+        this._inputTarget.addEventListener('blur', this._onBlur);
 
         if (this._canvas) {
             this._canvas.addEventListener('mousemove', this._onMouseMove);

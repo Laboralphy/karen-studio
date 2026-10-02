@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import pluginVue from 'eslint-plugin-vue';
+import prettier from 'eslint-config-prettier/flat';
 
 export default tseslint.config(
     { ignores: ['out/**', 'dist/**', 'node_modules/**'] },
@@ -16,9 +17,13 @@ export default tseslint.config(
             // Inutile avec TypeScript, qui vérifie déjà les identifiants (DOM, Node…).
             'no-undef': 'off',
             '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-            'vue/html-indent': ['error', 4],
-            'vue/max-attributes-per-line': 'off',
-            'vue/singleline-html-element-content-newline': 'off',
         },
+    },
+    // La mise en forme relève de Prettier : on coupe les règles de style qui le contredisent.
+    prettier,
+    {
+        // Les tests utilisent des scripts sans pause (générateurs sans yield) volontairement.
+        files: ['tests/**/*.ts'],
+        rules: { 'require-yield': 'off' },
     }
 );

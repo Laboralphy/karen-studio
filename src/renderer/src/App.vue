@@ -1,7 +1,21 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
 import GamePanel from './components/GamePanel.vue';
 import { TABS } from './tabs';
+import { store } from './store/project';
+
+// Window title: project name, with a mark when there are unsaved changes.
+watchEffect(() => {
+    document.title = `${store.dirty ? '● ' : ''}${store.project.name} — Karen Studio`;
+});
+
+// Unsaved changes: block closing; the main process then asks for confirmation.
+window.addEventListener('beforeunload', (e) => {
+    if (store.dirty) {
+        e.preventDefault();
+        e.returnValue = false;
+    }
+});
 
 const activeId = ref(TABS[0].id);
 const activeTab = computed(() => TABS.find((t) => t.id === activeId.value) ?? TABS[0]);

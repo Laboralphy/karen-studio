@@ -2,6 +2,7 @@ import { Vector2D } from '../core/Vector2D.js';
 import { Observatory } from '../core/Observatory.js';
 import { FairyAnimation } from './FairyAnimation.js';
 import { FairyFlight } from './FairyFlight.js';
+import type { FairyImage } from './FairyImage.js';
 import {
     FairyCollider,
     FairyCollisionShape,
@@ -38,7 +39,7 @@ export class Fairy<TEvents extends FairyBaseEvents = FairyBaseEvents> implements
     /** Currently playing animation, or null if none. */
     oAnimation: FairyAnimation | null = null;
     /** The sprite sheet image to draw from. Set by FairyEngine.createFairy. */
-    oImage: HTMLImageElement | null = null;
+    oImage: FairyImage | null = null;
     /** The canvas 2D context to render into. Set by Fairies.linkFairy. */
     oContext: CanvasRenderingContext2D | null = null;
     /** The spatial hash collider shared across all sprites. Set by FairyEngine.createFairy. */
@@ -126,7 +127,7 @@ export class Fairy<TEvents extends FairyBaseEvents = FairyBaseEvents> implements
     }
 
     /** Set the sprite sheet image to draw from. */
-    setImage(image: HTMLImageElement): void {
+    setImage(image: FairyImage): void {
         this.oImage = image;
     }
 
@@ -235,7 +236,7 @@ export class Fairy<TEvents extends FairyBaseEvents = FairyBaseEvents> implements
             return;
         }
         const absoluteFrame = this.oAnimation.nFrameIndex + this.oAnimation.nFrameStart;
-        const cols = Math.floor(this.oImage.naturalWidth / this.nWidth);
+        const cols = Math.floor(this.oImage.width / this.nWidth);
         const sx = (absoluteFrame % cols) * this.nWidth + this.oAnimation.xSrc;
         const sy = Math.floor(absoluteFrame / cols) * this.nHeight + this.oAnimation.ySrc;
         const s = this.renderScale;

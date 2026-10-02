@@ -1,6 +1,11 @@
 import type { Component } from 'vue';
 import TabPlaceholder from './tabs/TabPlaceholder.vue';
 import AboutTab from './tabs/AboutTab.vue';
+import SystemTab from './tabs/SystemTab.vue';
+import CodeTab from './tabs/CodeTab.vue';
+import BobTab from './tabs/BobTab.vue';
+import SpritesTab from './tabs/SpritesTab.vue';
+import LevelTab from './tabs/LevelTab.vue';
 
 export interface TabDef {
     id: string;
@@ -12,36 +17,11 @@ export interface TabDef {
 
 /** Onglets de l'éditeur, dans l'ordre d'affichage. */
 export const TABS: TabDef[] = [
-    {
-        id: 'system',
-        label: 'Système',
-        component: TabPlaceholder,
-        description: 'Enregistrer et charger un projet.',
-    },
-    {
-        id: 'code',
-        label: 'Code',
-        component: TabPlaceholder,
-        description: 'Programmer le jeu avec des blocs.',
-    },
-    {
-        id: 'bob',
-        label: 'BOB',
-        component: TabPlaceholder,
-        description: 'Dessiner les éléments de décor (32×32).',
-    },
-    {
-        id: 'sprites',
-        label: 'Sprites',
-        component: TabPlaceholder,
-        description: 'Dessiner et animer les sprites (32×32).',
-    },
-    {
-        id: 'level',
-        label: 'Niveau',
-        component: TabPlaceholder,
-        description: 'Placer les BOB et les marqueurs dans les niveaux.',
-    },
+    { id: 'system', label: 'Système', component: SystemTab },
+    { id: 'code', label: 'Code', component: CodeTab },
+    { id: 'bob', label: 'BOB', component: BobTab },
+    { id: 'sprites', label: 'Sprites', component: SpritesTab },
+    { id: 'level', label: 'Niveau', component: LevelTab },
     {
         id: 'sky',
         label: 'Ciel',

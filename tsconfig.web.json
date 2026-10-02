@@ -15,7 +15,9 @@
             "@fairy/*": ["src/engine/*"],
             "@fairy-core/*": ["src/core/*"],
             "@runtime/*": ["src/runtime/*"],
-            "@renderer/*": ["src/renderer/src/*"]
+            "@renderer/*": ["src/renderer/src/*"],
+            "@project/*": ["src/project/*"],
+            "@blocks/*": ["src/blocks/*"]
         }
     },
     "include": [
@@ -25,6 +27,8 @@
         "src/engine/**/*",
         "src/core/**/*",
         "src/runtime/**/*",
+        "src/project/**/*",
+        "src/blocks/**/*",
         "tests/**/*"
     ]
 }

@@ -1,5 +1,6 @@
 import { FairyTile } from './FairyTile.js';
-import { IFairyLayer } from './IFairyLayer';
+import type { FairyImage } from './FairyImage.js';
+import type { IFairyLayer } from './IFairyLayer.js';
 
 /** Entry tracking a tile that has an active animation and needs per-tick redraws. */
 interface DynamicTileEntry {
@@ -28,7 +29,7 @@ export class FairyMatrix implements IFairyLayer {
     /** Height of each tile in pixels. */
     private _tileH = 0;
     /** The sprite-sheet image containing all tile graphics. */
-    private _image: HTMLImageElement | null = null;
+    private _image: FairyImage | null = null;
     /** Off-screen canvas onto which tiles are rendered. */
     private _canvas: HTMLCanvasElement;
     /** Rendering context for the off-screen canvas. */
@@ -59,7 +60,7 @@ export class FairyMatrix implements IFairyLayer {
     }
 
     /** Set the sprite-sheet image and mark the map dirty for a full redraw. */
-    setImage(image: HTMLImageElement): void {
+    setImage(image: FairyImage): void {
         this._image = image;
         this._invalid = true;
     }
@@ -96,6 +97,11 @@ export class FairyMatrix implements IFairyLayer {
         this._overMatrix?.lookAt(x * this._overLookX, y * this._overLookY);
     }
 
+    /** Camera hook: scroll the map so that world `(x, y)` is at the top-left of the screen. */
+    setView(x: number, y: number): void {
+        this.lookAt(x, y);
+    }
+
     /**
      * Attach a background parallax matrix.
      * @param xFactor - Horizontal parallax ratio relative to this matrix's scroll.
@@ -127,6 +133,56 @@ export class FairyMatrix implements IFairyLayer {
             throw new Error(`FairyMatrix: (${x}, ${y}) is out of range.`);
         }
         return this._grid[y][x];
+    }
+
+    /** Number of columns in the grid. */
+    getCols(): number {
+        return this._cols;
+    }
+
+    /** Number of rows in the grid. */
+    getRows(): number {
+        return this._rows;
+    }
+
+    /** Width of a tile in pixels. */
+    getTileWidth(): number {
+        return this._tileW;
+    }
+
+    /** Height of a tile in pixels. */
+    getTileHeight(): number {
+        return this._tileH;
+    }
+
+    /**
+     * Replace the tile at `(x, y)` with a static tile (graphics + collision code).
+     * Unlike `setTileGfx`, only that cell is redrawn, so it is cheap enough to be
+     * called every tick (e.g. a block broken by the player).
+     */
+    setTile(x: number, y: number, gfx: number, code: number): void {
+        const tile = this.getTile(x, y);
+        tile.oAnimation.setFrameRange(0, 1);
+        tile.oAnimation.setNoLoop();
+        tile.setGfx(gfx);
+        tile.setCode(code);
+        this._dynamicTiles = this._dynamicTiles.filter((e) => e.tile !== tile);
+        if (!this._invalid) {
+            this._drawTile(x, y);
+        }
+    }
+
+    /**
+     * Return the collision code of the tile containing world pixel `(px, py)`,
+     * or 0 when the point is outside the grid.
+     */
+    getTileCodeAt(px: number, py: number): number {
+        const x = Math.floor(px / this._tileW);
+        const y = Math.floor(py / this._tileH);
+        if (x < 0 || y < 0 || x >= this._cols || y >= this._rows) {
+            return 0;
+        }
+        return this._grid[y][x].getCode();
     }
 
     /** Set the graphical tile index at `(x, y)` and mark the map dirty. */

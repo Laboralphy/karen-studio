@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { GameRuntime } from '@runtime/GameRuntime';
+import { projectSnapshot } from '../store/project';
 
 const SCREEN_W = 640;
 const SCREEN_H = 480;
@@ -7,6 +9,18 @@ const SCREEN_H = 480;
 const canvas = ref<HTMLCanvasElement | null>(null);
 const running = ref(false);
 const zoomed = ref(false);
+const error = ref<string | null>(null);
+/** Latest script error; the game keeps running. */
+const scriptError = ref<string | null>(null);
+
+const runtime = new GameRuntime();
+runtime.onError = (message) => {
+    running.value = false;
+    error.value = message;
+};
+runtime.onScriptError = (message) => {
+    scriptError.value = message;
+};
 
 /** Écran affiché quand aucun jeu ne tourne. */
 function drawIdleScreen(): void {
@@ -26,16 +40,26 @@ function drawIdleScreen(): void {
 }
 
 function start(): void {
-    running.value = true;
-    canvas.value?.focus();
+    const el = canvas.value;
+    if (!el) {
+        return;
+    }
+    error.value = null;
+    scriptError.value = null;
+    if (runtime.start(el, el, projectSnapshot())) {
+        running.value = true;
+        el.focus();
+    }
 }
 
 function stop(): void {
+    runtime.stop();
     running.value = false;
     drawIdleScreen();
 }
 
 onMounted(drawIdleScreen);
+onBeforeUnmount(() => runtime.stop());
 </script>
 
 <template>
@@ -48,6 +72,11 @@ onMounted(drawIdleScreen);
         <div class="screen">
             <canvas ref="canvas" :width="SCREEN_W" :height="SCREEN_H" tabindex="0" />
         </div>
+        <p v-if="error" class="error">Le jeu s'est arrêté : {{ error }}</p>
+        <p v-if="scriptError" class="error">{{ scriptError }}</p>
+        <p v-if="running && !error" class="hint">
+            Clique sur l'écran de jeu pour lui donner le clavier.
+        </p>
     </section>
 </template>
 
@@ -83,6 +112,17 @@ canvas {
 
 canvas:focus {
     border-color: var(--accent-2);
+}
+
+.hint,
+.error {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.error {
+    color: var(--danger);
 }
 
 /* Mode agrandi : le panneau couvre toute la fenêtre, l'écran garde son ratio 4:3. */

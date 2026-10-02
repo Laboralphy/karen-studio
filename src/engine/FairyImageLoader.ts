@@ -1,11 +1,15 @@
+import type { FairyImage } from './FairyImage.js';
+
 /**
- * Loads and caches `HTMLImageElement` objects by string ID.
- * Images are started in parallel; `complete()` polls all of them and returns
- * true only when every registered image has finished loading.
+ * Loads and caches images by string ID.
+ * Images loaded from a URL are started in parallel; `complete()` polls all of them
+ * and returns true only when every registered image has finished loading.
+ * Images generated in memory (canvas, bitmap) can be registered with `add` and are
+ * immediately ready.
  */
 export class FairyImageLoader {
-    /** Map from ID to the corresponding image element. */
-    private _images: Map<string, HTMLImageElement> = new Map();
+    /** Map from ID to the corresponding image. */
+    private _images: Map<string, FairyImage> = new Map();
     /** Cached result of the last `checkComplete` call to avoid re-scanning. */
     private _complete = false;
 
@@ -14,6 +18,7 @@ export class FairyImageLoader {
      * @returns A promise that resolves with the loaded `HTMLImageElement`.
      */
     load(id: string, src: string): Promise<HTMLImageElement> {
+        this._complete = false;
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.addEventListener('load', () => resolve(img));
@@ -23,11 +28,16 @@ export class FairyImageLoader {
         });
     }
 
+    /** Register an already available image (canvas, bitmap, loaded image) under `id`. */
+    add(id: string, image: FairyImage): void {
+        this._images.set(id, image);
+    }
+
     /**
      * Return the image registered under `id`, or null if not found.
      * The image may still be loading; check `complete()` before use.
      */
-    get(id: string): HTMLImageElement | null {
+    get(id: string): FairyImage | null {
         return this._images.get(id) ?? null;
     }
 
@@ -37,7 +47,7 @@ export class FairyImageLoader {
      */
     checkComplete(): boolean {
         for (const img of this._images.values()) {
-            if (!img.complete) {
+            if (img instanceof HTMLImageElement && !img.complete) {
                 return (this._complete = false);
             }
         }

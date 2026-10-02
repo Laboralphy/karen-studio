@@ -7,6 +7,8 @@ export default defineConfig({
             '@fairy': resolve(__dirname, 'src/engine'),
             '@fairy-core': resolve(__dirname, 'src/core'),
             '@runtime': resolve(__dirname, 'src/runtime'),
+            '@project': resolve(__dirname, 'src/project'),
+            '@blocks': resolve(__dirname, 'src/blocks'),
         },
     },
     test: {

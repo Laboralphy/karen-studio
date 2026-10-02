@@ -1,5 +1,5 @@
 /** Animation playback mode. */
-export const enum LoopType {
+export enum LoopType {
     /** No animation; the frame stays fixed. */
     None = 0,
     /** Frames advance from start to end, then loop (or stop after `nLoopCount` passes). */
@@ -116,6 +116,9 @@ export class FairyAnimation {
             }
             case LoopType.Backward: {
                 this.nLoopDirection = -1;
+                // Play from the last frame down to frame 0, and freeze on 0 when over.
+                this.nFrameIndex = this.nFrameCount - 1;
+                this.nLoopFinalFrame = 0;
                 this._loopHandler = () => this._proceedLoopBackward();
                 break;
             }
