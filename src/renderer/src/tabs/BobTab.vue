@@ -8,7 +8,7 @@ import AnimPreview from '../components/AnimPreview.vue';
 import TextureGenerator from '../components/TextureGenerator.vue';
 import { plainCopy, store, touch } from '../store/project';
 import { nextId, type BobCollision, type Frame } from '@project/model';
-import { blankPixels } from '@project/pixels';
+import { blankPixels, editAllFrames, type PixelEdit } from '@project/pixels';
 import { removeBobFromLevels } from '@project/level';
 import type { Material } from '@project/textures';
 
@@ -67,11 +67,18 @@ function remove(): void {
     touch();
 }
 
-function setPixels(pixels: number[]): void {
-    if (bob.value) {
-        bob.value.frames[frameIndex.value] = pixels;
-        touch();
+/** « Dessiner sur toutes les images »: each edit is applied to every image. */
+const drawAll = ref(false);
+
+function setPixels(pixels: number[], edit: PixelEdit): void {
+    const current = bob.value;
+    if (!current) return;
+    if (drawAll.value && current.frames.length > 1) {
+        current.frames = editAllFrames(current.frames, frameIndex.value, pixels, edit);
+    } else {
+        current.frames[frameIndex.value] = pixels;
     }
+    touch();
 }
 
 function setFrames(frames: Frame[]): void {
@@ -155,6 +162,15 @@ function replaceWithTexture(frames: Frame[], material: Material): void {
                     :palette="store.project.palette"
                     @update:frames="setFrames"
                 />
+                <label
+                    v-if="bob.frames.length > 1"
+                    class="all-frames-toggle"
+                    :class="{ on: drawAll }"
+                    title="Chaque pixel dessiné est ajouté au même endroit sur toutes les images"
+                >
+                    <input v-model="drawAll" type="checkbox" />
+                    Dessiner sur toutes les images
+                </label>
                 <div v-if="bob.frames.length > 1" class="props">
                     <AnimPreview
                         :frames="bob.frames"
@@ -179,6 +195,7 @@ function replaceWithTexture(frames: Frame[], material: Material): void {
                     <PixelEditor
                         v-model:color="color"
                         :pixels="bob.frames[frameIndex]"
+                        :all-frames="drawAll && bob.frames.length > 1"
                         :palette="store.project.palette"
                         @update:pixels="setPixels"
                     />

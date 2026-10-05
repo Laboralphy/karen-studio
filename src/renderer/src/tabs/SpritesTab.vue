@@ -7,7 +7,7 @@ import FrameStrip from '../components/FrameStrip.vue';
 import AnimPreview from '../components/AnimPreview.vue';
 import { plainCopy, store, touch } from '../store/project';
 import { nextId, type Frame, type SpriteAnimation } from '@project/model';
-import { blankPixels } from '@project/pixels';
+import { blankPixels, editAllFrames, type PixelEdit } from '@project/pixels';
 
 const selectedId = ref<number | null>(store.project.sprites[0]?.id ?? null);
 const frameIndex = ref(0);
@@ -67,11 +67,18 @@ function remove(): void {
     touch();
 }
 
-function setPixels(pixels: number[]): void {
-    if (sprite.value) {
-        sprite.value.frames[frameIndex.value] = pixels;
-        touch();
+/** « Dessiner sur toutes les images »: each edit is applied to every image. */
+const drawAll = ref(false);
+
+function setPixels(pixels: number[], edit: PixelEdit): void {
+    const current = sprite.value;
+    if (!current) return;
+    if (drawAll.value && current.frames.length > 1) {
+        current.frames = editAllFrames(current.frames, frameIndex.value, pixels, edit);
+    } else {
+        current.frames[frameIndex.value] = pixels;
     }
+    touch();
 }
 
 /**
@@ -161,10 +168,20 @@ const animFrames = (a: SpriteAnimation) => a.frames.map((i) => sprite.value!.fra
                 :palette="store.project.palette"
                 @update:frames="setFrames"
             />
+            <label
+                v-if="sprite.frames.length > 1"
+                class="all-frames-toggle"
+                :class="{ on: drawAll }"
+                title="Chaque pixel dessiné est ajouté au même endroit sur toutes les images"
+            >
+                <input v-model="drawAll" type="checkbox" />
+                Dessiner sur toutes les images
+            </label>
             <div class="drawing">
                 <PixelEditor
                     v-model:color="color"
                     :pixels="sprite.frames[frameIndex]"
+                    :all-frames="drawAll && sprite.frames.length > 1"
                     :palette="store.project.palette"
                     @update:pixels="setPixels"
                 />

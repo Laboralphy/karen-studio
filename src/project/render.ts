@@ -1,4 +1,5 @@
 import { ASSET_SIZE, TRANSPARENT, type Bob, type SpriteAsset } from './model';
+import { flipFrame } from './pixels';
 
 /** Parse `#rrggbb` into [r, g, b]. */
 function rgb(color: string): [number, number, number] {
@@ -85,13 +86,7 @@ export function buildTileset(
 
 /** Mirror a 32×32 image horizontally. */
 export function mirrorFrame(frame: readonly number[]): number[] {
-    const out = new Array<number>(frame.length);
-    for (let y = 0; y < ASSET_SIZE; y++) {
-        for (let x = 0; x < ASSET_SIZE; x++) {
-            out[y * ASSET_SIZE + x] = frame[y * ASSET_SIZE + ASSET_SIZE - 1 - x];
-        }
-    }
-    return out;
+    return flipFrame(frame, true);
 }
 
 /** Where each animation lives in a sprite sheet: first cell and number of cells. */

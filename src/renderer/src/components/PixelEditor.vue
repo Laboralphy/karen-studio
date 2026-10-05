@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { ASSET_SIZE, TRANSPARENT } from '@project/model';
-import { floodFill } from '@project/pixels';
+import { flipFrame, floodFill, type PixelEdit } from '@project/pixels';
 
 type Tool = 'pencil' | 'eraser' | 'fill' | 'picker';
 
 const props = defineProps<{
     pixels: number[];
     palette: string[];
+    /** « Dessiner sur toutes les images » is on: highlight the drawing area. */
+    allFrames?: boolean;
 }>();
 const emit = defineEmits<{
-    'update:pixels': [pixels: number[]];
+    /** The new image, and what was done (so that the edit can be applied to other images). */
+    'update:pixels': [pixels: number[], edit: PixelEdit];
 }>();
 /** Selected palette index (shared with the palette grid). */
 const color = defineModel<number>('color', { required: true });
@@ -84,6 +87,8 @@ function apply(e: PointerEvent): void {
     const pixels = [...props.pixels];
     if (tool.value === 'fill') {
         floodFill(pixels, ASSET_SIZE, x, y, color.value);
+        emit('update:pixels', pixels, { kind: 'fill', x, y, color: color.value });
+        return;
     } else {
         const value = tool.value === 'eraser' ? TRANSPARENT : color.value;
         if (pixels[i] === value) {
@@ -91,7 +96,7 @@ function apply(e: PointerEvent): void {
         }
         pixels[i] = value;
     }
-    emit('update:pixels', pixels);
+    emit('update:pixels', pixels, { kind: 'paint' });
 }
 
 function onDown(e: PointerEvent): void {
@@ -112,20 +117,17 @@ function onUp(): void {
 
 /** Horizontal or vertical mirror of the whole image. */
 function flip(horizontal: boolean): void {
-    const pixels = [...props.pixels];
-    for (let y = 0; y < ASSET_SIZE; y++) {
-        for (let x = 0; x < ASSET_SIZE; x++) {
-            const sx = horizontal ? ASSET_SIZE - 1 - x : x;
-            const sy = horizontal ? y : ASSET_SIZE - 1 - y;
-            pixels[y * ASSET_SIZE + x] = props.pixels[sy * ASSET_SIZE + sx];
-        }
-    }
-    emit('update:pixels', pixels);
+    emit('update:pixels', flipFrame(props.pixels, horizontal), { kind: 'flip', horizontal });
 }
 
 function clear(): void {
-    if (window.confirm('Effacer tout le dessin ?')) {
-        emit('update:pixels', new Array<number>(ASSET_SIZE * ASSET_SIZE).fill(TRANSPARENT));
+    const question = props.allFrames
+        ? 'Effacer le dessin de TOUTES les images ?'
+        : 'Effacer tout le dessin ?';
+    if (window.confirm(question)) {
+        emit('update:pixels', new Array<number>(ASSET_SIZE * ASSET_SIZE).fill(TRANSPARENT), {
+            kind: 'clear',
+        });
     }
 }
 
@@ -153,6 +155,7 @@ onMounted(draw);
         </div>
         <canvas
             ref="canvas"
+            :class="{ 'all-frames': allFrames }"
             :width="SIZE"
             :height="SIZE"
             @pointerdown="onDown"
@@ -204,5 +207,10 @@ canvas {
     cursor: crosshair;
     border: 1px solid var(--border);
     touch-action: none;
+}
+
+canvas.all-frames {
+    border: 2px solid #ff6fae;
+    box-shadow: 0 0 10px rgba(255, 111, 174, 0.5);
 }
 </style>

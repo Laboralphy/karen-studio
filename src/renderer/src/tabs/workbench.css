@@ -44,3 +44,26 @@ select {
     color: var(--text-dim);
     font-size: 13px;
 }
+
+.all-frames-toggle {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.all-frames-toggle input {
+    padding: 0;
+    accent-color: #ff6fae;
+}
+
+.all-frames-toggle.on {
+    border-color: #ff6fae;
+    color: #ff6fae;
+    background: rgba(255, 111, 174, 0.12);
+}
